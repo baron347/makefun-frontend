@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Bounties · make.fun — a small, read-only client for the make.fun public API: the live board, bounty pages, standings and public profiles.">
+<meta name="description" content="A light, read-only browser for make.fun bounties: the live board, bounty pages, standings and public profiles, straight from the make.fun public API.">
 <title>Bounties · make.fun</title>
 <link rel="icon" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
+<!-- The whole app is one ES module; it renders into #app below. -->
 <script type="module" src="main.js"></script>
 </head>
 <body>
@@ -20,8 +21,8 @@
 <main id="app" aria-live="polite"></main>
 <footer>
   <p id="api-status">This view: nothing fetched yet</p>
-  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are cached and revalidated with ETags · read-only, no sign-in, no tracking</p>
+  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are cached in memory and revalidated with ETags · read-only: no sign-in, no tracking, nothing is sent anywhere</p>
 </footer>
-<noscript><p class="error">This page needs JavaScript: it fetches live bounty data from the make.fun public API.</p></noscript>
+<noscript><p class="error">This page needs JavaScript — it fetches the live bounty data from the make.fun public API in your browser.</p></noscript>
 </body>
 </html>
