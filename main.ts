@@ -1,7 +1,7 @@
-// Entry point for the makefun-frontend-01 submission (Node 22, standard
+// Submission entry point for makefun-frontend-01 (Node 22, standard
 // library only — nothing to install).
 //
-// What gets graded lives in app/ next to this file: static files only
+// The graded work lives in app/ next to this file: static files only
 // (index.html, one stylesheet, small ES modules, no build step). A browser
 // opens app/index.html and the app reads live data from the make.fun public
 // API at https://make.fun/api.
@@ -11,7 +11,7 @@
 // container, where /output is not writable) and writes dossier.json there —
 // the summary the judge reads: which screenshots, how big the first load
 // is, and the source itself. dossier.json is produced by the vendored
-// library in vendor/makefun-frontend.ts; do not touch that file, because the
+// library in vendor/makefun-frontend.ts; leave that file alone, because the
 // scorer expects dossier.json byte-for-byte the way its own copy writes it.
 //
 // The app itself is the work: a board of open bounties plus a page per
@@ -38,7 +38,7 @@ const shotsDir = join(here, "screenshots");
 // directories in app/, or 16 MiB of app files in total. app/ is counted
 // beside the output directory's own 1000-entry cap, its screenshots/ and
 // dossier.json.
-const dossierLimits = {
+const limits = {
   text_max_bytes: 163840,
   screenshots: { max: 3, max_bytes: 262144 },
   app_max_files: 993,
@@ -52,5 +52,5 @@ if (existsSync(shotsDir)) {
   cpSync(shotsDir, join(outDir, "screenshots"), { recursive: true });
 }
 
-const dossier = buildDossier(outDir, dossierLimits);
+const dossier = buildDossier(outDir, limits);
 writeFileSync(join(outDir, "dossier.json"), dossier);

@@ -1,6 +1,6 @@
-// Small formatting helpers for the board: escaping, money, dates, countdowns,
-// and a tiny Markdown renderer. Everything here is pure and locale-fixed
-// (en-US, UTC) so a render looks the same on any machine.
+// Formatting helpers for the board: escaping, money, dates, countdowns,
+// ordinals and a small Markdown renderer. All pure, locale-fixed (en-US,
+// UTC) so a render looks the same on any machine.
 
 // Escape the five characters that can break out of HTML text or attributes.
 export function escapeHtml(value) {
@@ -11,15 +11,16 @@ export function escapeHtml(value) {
 export function usd(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return "—";
+  const cents = Number.isInteger(amount) ? 0 : 2;
   return amount.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    minimumFractionDigits: cents,
     maximumFractionDigits: 2,
   });
 }
 
-// A plain integer with thousands separators, or a dash when it is not a number.
+// A plain integer with thousands separators, or a dash when not a number.
 export function fmtInt(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toLocaleString("en-US") : "—";
@@ -34,10 +35,15 @@ export function fmtBytes(value) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function toDate(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 // A full date + time, always in UTC so it never depends on the reader's zone.
 export function fullDate(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  const d = toDate(value);
+  if (!d) return "—";
   return `${d.toLocaleString("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -47,8 +53,8 @@ export function fullDate(value) {
 
 // A short day date, e.g. "Nov 17, 2026", in UTC.
 export function dayDate(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  const d = toDate(value);
+  if (!d) return "—";
   return d.toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",
@@ -59,8 +65,8 @@ export function dayDate(value) {
 
 // A compact timestamp for the phases strip, e.g. "Nov 17, 12:30 UTC".
 export function stamp(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  const d = toDate(value);
+  if (!d) return "—";
   return (
     d.toLocaleString("en-US", {
       month: "short",
@@ -73,17 +79,19 @@ export function stamp(value) {
   );
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
-const MIN_MS = 60 * 1000;
+const MS_DAY = 86_400_000;
+const MS_HOUR = 3_600_000;
+const MS_MIN = 60_000;
 
 // Time left, coarse: "2d 3h left", "5h 12m left", "9m left", or "ended".
 export function left(value) {
-  const ms = new Date(value).getTime() - Date.now();
-  if (Number.isNaN(ms) || ms <= 0) return "ended";
-  const days = Math.floor(ms / DAY_MS);
-  const hours = Math.floor((ms % DAY_MS) / HOUR_MS);
-  const mins = Math.floor((ms % HOUR_MS) / MIN_MS);
+  const d = toDate(value);
+  if (!d) return "ended";
+  const ms = d.getTime() - Date.now();
+  if (ms <= 0) return "ended";
+  const days = Math.floor(ms / MS_DAY);
+  const hours = Math.floor((ms % MS_DAY) / MS_HOUR);
+  const mins = Math.floor((ms % MS_HOUR) / MS_MIN);
   if (days > 0) return `${days}d ${hours}h left`;
   if (hours > 0) return `${hours}h ${mins}m left`;
   return `${mins}m left`;
@@ -91,8 +99,10 @@ export function left(value) {
 
 // Time left, ticking every second: "2d 3h 4m", "5h 12m 30s", "9m 4s".
 export function leftExact(value) {
-  const ms = new Date(value).getTime() - Date.now();
-  if (Number.isNaN(ms) || ms <= 0) return "ended";
+  const d = toDate(value);
+  if (!d) return "ended";
+  const ms = d.getTime() - Date.now();
+  if (ms <= 0) return "ended";
   const total = Math.floor(ms / 1000);
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
@@ -105,8 +115,10 @@ export function leftExact(value) {
 
 // How long ago something happened: "just now", "12 min ago", "3h 5m ago".
 export function since(value) {
-  const ms = Date.now() - new Date(value).getTime();
-  if (Number.isNaN(ms) || ms < 0) return "just now";
+  const d = toDate(value);
+  if (!d) return "just now";
+  const ms = Date.now() - d.getTime();
+  if (ms < 0) return "just now";
   const mins = Math.floor(ms / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins} min ago`;
@@ -119,9 +131,9 @@ export function since(value) {
 export function ordinal(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  const suffixes = ["th", "st", "nd", "rd"];
+  const tails = ["th", "st", "nd", "rd"];
   const rem100 = n % 100;
-  return n + (suffixes[(rem100 - 20) % 10] || suffixes[rem100] || suffixes[0]);
+  return n + (tails[(rem100 - 20) % 10] || tails[rem100] || tails[0]);
 }
 
 // Is this bounty still taking entries? A bounty past its deadline counts as
@@ -151,31 +163,31 @@ function inlineMd(text) {
 // separated paragraphs. Anything else is a paragraph.
 export function miniMd(src) {
   const out = [];
-  let list = null;
-  const flushList = () => {
-    if (list) {
-      out.push(`<ul>${list.join("")}</ul>`);
-      list = null;
+  let items = null;
+  const closeList = () => {
+    if (items) {
+      out.push(`<ul>${items.join("")}</ul>`);
+      items = null;
     }
   };
-  for (const line of String(src ?? "").split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("## ")) {
-      flushList();
-      out.push(`<h3>${inlineMd(trimmed.slice(3))}</h3>`);
-    } else if (trimmed.startsWith("### ")) {
-      flushList();
-      out.push(`<h4>${inlineMd(trimmed.slice(4))}</h4>`);
-    } else if (trimmed.startsWith("- ")) {
-      list = list ?? [];
-      list.push(`<li>${inlineMd(trimmed.slice(2))}</li>`);
-    } else if (trimmed === "") {
-      flushList();
+  for (const rawLine of String(src ?? "").split("\n")) {
+    const line = rawLine.trim();
+    if (line.startsWith("## ")) {
+      closeList();
+      out.push(`<h3>${inlineMd(line.slice(3))}</h3>`);
+    } else if (line.startsWith("### ")) {
+      closeList();
+      out.push(`<h4>${inlineMd(line.slice(4))}</h4>`);
+    } else if (line.startsWith("- ")) {
+      if (!items) items = [];
+      items.push(`<li>${inlineMd(line.slice(2))}</li>`);
+    } else if (line === "") {
+      closeList();
     } else {
-      flushList();
-      out.push(`<p>${inlineMd(trimmed)}</p>`);
+      closeList();
+      out.push(`<p>${inlineMd(line)}</p>`);
     }
   }
-  flushList();
+  closeList();
   return out.join("");
 }

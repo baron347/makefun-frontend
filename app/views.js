@@ -17,67 +17,69 @@ import {
 
 // What a bounty is worth right now: the live pot when the API gives one,
 // otherwise the headline reward.
-function potNow(comp) {
+function currentPot(comp) {
   return usd(comp.potUsd ?? comp.rewardAmount);
 }
 
 // What it costs to enter, as a short label.
-function entryCost(comp) {
+function feeLabel(comp) {
   const fee = Number(comp.entryFeeUsd);
   return fee > 0 ? usd(comp.entryFeeUsd) : "Free";
 }
 
 // A small status pill for a bounty row or page.
-function statusPill(comp) {
+function stateBadge(comp) {
   if (!openNow(comp)) return '<span class="badge ended">Finished</span>';
-  const leftMs = new Date(comp.deadline).getTime() - Date.now();
-  if (leftMs < 24 * 60 * 60 * 1000) {
+  const remaining = new Date(comp.deadline).getTime() - Date.now();
+  if (remaining < 24 * 60 * 60 * 1000) {
     return '<span class="badge soon">Ending soon</span>';
   }
   return '<span class="badge open">Open</span>';
 }
 
 // How far through its window a bounty is: 0 at opening, 1 at deadline.
-function progress(comp) {
+function elapsedFrac(comp) {
   const start = new Date(comp.publishedAt).getTime();
   const end = new Date(comp.deadline).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
+  const frac = (Date.now() - start) / (end - start);
+  return Math.min(1, Math.max(0, frac));
 }
 
 // What a rank pays out of the live pot right now.
-function prizeFor(comp, rank) {
+function prizeAt(comp, rank) {
   const rows = comp.rewardsNow ?? [];
   const row = rows.find((r) => Number(r.place) === Number(rank));
   return row ? usd(row.amountUsd) : "—";
 }
 
 // An entrant's avatar URL, made absolute when the API gives a path.
-function avatarSrc(image) {
+function avatarUrl(image) {
   if (!image) return "";
   return image.startsWith("/") ? `https://make.fun${image}` : image;
 }
 
 // One row of the bounty list.
-function bountyRow(comp, selected) {
-  const urgent =
+function listRow(comp, isSelected) {
+  const closingSoon =
     openNow(comp) &&
     new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+  const soonBadge = closingSoon ? '<span class="badge soon">Ending soon</span>' : "";
   return `
-    <li class="row${selected ? " on" : ""}" data-action="select" data-slug="${escapeHtml(comp.slug)}" tabindex="0">
-      <span class="r-pot">${potNow(comp)}<small>pot</small></span>
+    <li class="row${isSelected ? " on" : ""}" data-action="select" data-slug="${escapeHtml(comp.slug)}" tabindex="0">
+      <span class="r-pot">${currentPot(comp)}<small>pot</small></span>
       <span class="r-main">
       <span class="r-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${escapeHtml(comp.title)}</a></span>
-        <span class="r-sub">${urgent ? '<span class="badge soon">Ending soon</span>' : ""}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${escapeHtml(comp.summary ?? comp.description ?? "")}</span>
+        <span class="r-sub">${soonBadge}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${escapeHtml(comp.summary ?? comp.description ?? "")}</span>
       </span>
-      <span class="r-fee">${entryCost(comp)}</span>
-      <span class="r-time"><span data-deadline="${escapeHtml(comp.deadline)}">${left(comp.deadline)}</span><i class="bar${urgent ? " hot" : ""}"><b style="width:${Math.round(100 * progress(comp))}%"></b></i></span>
+      <span class="r-fee">${feeLabel(comp)}</span>
+      <span class="r-time"><span data-deadline="${escapeHtml(comp.deadline)}">${left(comp.deadline)}</span><i class="bar${closingSoon ? " hot" : ""}"><b style="width:${Math.round(100 * elapsedFrac(comp))}%"></b></i></span>
       <span class="r-entries"><strong>${fmtInt(comp.submissionCount)}</strong><small>entries</small></span>
     </li>`;
 }
 
 // Order a list of bounties: by pot, by entries, or by deadline.
-function orderBy(list, key) {
+function sortList(list, key) {
   const copy = list.slice();
   if (key === "pot") {
     return copy.sort(
@@ -92,7 +94,7 @@ function orderBy(list, key) {
 }
 
 // The four-number strip above the board.
-function statStrip(live) {
+function statsStrip(live) {
   const pots = live.reduce(
     (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
     0,
@@ -101,20 +103,21 @@ function statStrip(live) {
   const next = live
     .slice()
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
-  const urgent =
+  const withinHour =
     next && new Date(next.deadline).getTime() - Date.now() < 60 * 60 * 1000;
+  const nextAttr = next ? ` data-countdown="${escapeHtml(next.deadline)}"` : "";
   return `
     <div class="stats" role="status">
       <div><span>Bounties open</span><strong>${fmtInt(live.length)}</strong></div>
       <div><span>Pots right now</span><strong class="green">${usd(pots)}</strong></div>
       <div><span>Entries so far</span><strong>${fmtInt(entries)}</strong></div>
-      <div><span>Closing next</span><strong class="${urgent ? "red" : ""}" ${next ? `data-countdown="${escapeHtml(next.deadline)}"` : ""}>${next ? leftExact(next.deadline) : "—"}</strong><small>${next ? escapeHtml(next.title) : ""}</small></div>
+      <div><span>Closing next</span><strong class="${withinHour ? "red" : ""}"${nextAttr}>${next ? leftExact(next.deadline) : "—"}</strong><small>${next ? escapeHtml(next.title) : ""}</small></div>
     </div>`;
 }
 
 // The live ticker: the newest entries on the selected bounty, or the newest
 // entry anywhere on the board.
-function liveTicker(live, detail) {
+function activityTicker(live, detail) {
   const parts = ['<span class="live-dot">●</span> Live now'];
   const recent = (detail?.submissions ?? [])
     .slice()
@@ -143,7 +146,7 @@ function liveTicker(live, detail) {
 }
 
 // Rewards as a table, grouping runs of places that pay the same.
-function rewardTable(comp) {
+function rewardsTable(comp) {
   const rows = (comp.rewardsNow ?? [])
     .slice()
     .sort((a, b) => Number(a.place) - Number(b.place));
@@ -160,17 +163,17 @@ function rewardTable(comp) {
         .join("");
       return `<table class="rewards"><thead><tr><th>Place</th><th>Pays</th></tr></thead><tbody>${body}</tbody></table>`;
     }
-    return `<p>Reward: <strong>${potNow(comp)}</strong></p>`;
+    return `<p>Reward: <strong>${currentPot(comp)}</strong></p>`;
   }
   const groups = [];
   for (const row of rows) {
     const last = groups[groups.length - 1];
-    if (
+    const continues =
       last &&
       last.baseUsd === row.baseUsd &&
       last.feeShareUsd === row.feeShareUsd &&
-      Number(row.place) === last.end + 1
-    ) {
+      Number(row.place) === last.end + 1;
+    if (continues) {
       last.end = Number(row.place);
       last.amountUsd = row.amountUsd;
     } else {
@@ -189,7 +192,8 @@ function rewardTable(comp) {
       const place =
         g.start === g.end ? ordinal(g.start) : `${g.start}–${g.end}`;
       const width = Math.max(4, Math.round((Number(g.amountUsd) / top) * 100));
-      return `<tr><td>${place}</td><td>${usd(g.baseUsd)}</td><td>+${usd(g.feeShareUsd)}</td><td><span class="pays"><i style="width:${width}%"></i></span><strong class="green">${usd(g.amountUsd)}</strong>${g.start !== g.end ? " each" : ""}</td></tr>`;
+      const each = g.start !== g.end ? " each" : "";
+      return `<tr><td>${place}</td><td>${usd(g.baseUsd)}</td><td>+${usd(g.feeShareUsd)}</td><td><span class="pays"><i style="width:${width}%"></i></span><strong class="green">${usd(g.amountUsd)}</strong>${each}</td></tr>`;
     })
     .join("");
   return `
@@ -200,13 +204,13 @@ function rewardTable(comp) {
 }
 
 // The opened → now → deadline → results timeline.
-function phaseTrack(comp) {
+function phaseStrip(comp) {
   const phases = comp.phases ?? [];
   const dev = phases.find((p) => p.key === "dev");
   const fin = phases.find((p) => p.key === "final");
   const deadline = dev?.endsAt ?? comp.deadline;
   const results = fin?.endsAt ?? null;
-  const done = Math.round(100 * progress({ ...comp, deadline }));
+  const done = Math.round(100 * elapsedFrac({ ...comp, deadline }));
   return `
     <div class="phases">
       <div class="track"><i style="width:${done}%"></i><b style="left:${done}%"></b></div>
@@ -220,13 +224,16 @@ function phaseTrack(comp) {
 }
 
 // The top-5 preview under a bounty.
-function topFive(comp, top5) {
+function topFiveTable(comp, top5) {
   if (!top5) return '<p class="note">Top 5 still loading…</p>';
   if (top5.length === 0) return '<p class="note">Nothing ranked here yet.</p>';
   const body = top5
     .map((entry) => {
-      const img = avatarSrc(entry.image);
-      return `<tr><td>${fmtInt(entry.rank ?? entry.performance)}</td><td class="entrant">${img ? `<img crossorigin="anonymous" src="${escapeHtml(img)}" alt="" width="20" height="20" loading="lazy">` : ""}<a href="#/profile/${encodeURIComponent(entry.handle)}">${escapeHtml(entry.handle)}</a></td><td><strong>${winPct(entry.value ?? entry.values?.judge)}</strong></td><td><strong class="green">${prizeFor(comp, entry.prize_rank ?? entry.rank)}</strong></td></tr>`;
+      const img = avatarUrl(entry.image);
+      const pic = img
+        ? `<img crossorigin="anonymous" src="${escapeHtml(img)}" alt="" width="20" height="20" loading="lazy">`
+        : "";
+      return `<tr><td>${fmtInt(entry.rank ?? entry.performance)}</td><td class="entrant">${pic}<a href="#/profile/${encodeURIComponent(entry.handle)}">${escapeHtml(entry.handle)}</a></td><td><strong>${winPct(entry.value ?? entry.values?.judge)}</strong></td><td><strong class="green">${prizeAt(comp, entry.prize_rank ?? entry.rank)}</strong></td></tr>`;
     })
     .join("");
   return `
@@ -239,25 +246,32 @@ function topFive(comp, top5) {
 
 // The shared detail block: stat cards, entry buttons, rewards, phases, top 5.
 export function detailBlock(comp, top5, lastHour) {
-  const urgent =
+  const closingSoon =
     openNow(comp) &&
     new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
   const paid = comp.entryFeeUsd && Number(comp.entryFeeUsd) > 0;
+  const feeNote = paid
+    ? `${fmtInt(comp.entryFeePayers)} paid · one per account`
+    : "nothing to pay";
+  const hourNote =
+    lastHour != null
+      ? `${fmtInt(lastHour)} in the past hour`
+      : "the judge's win rate decides";
   return `
     <div class="cards">
-      <div><span>Pot now</span><strong class="green">${potNow(comp)}</strong><small>${usd(comp.rewardAmount)} prize + ${usd(comp.entryFeesUsd ?? 0)} from fees</small></div>
-      <div><span>To enter</span><strong>${paid ? usd(comp.entryFeeUsd) : "Free"}</strong><small>${paid ? `${fmtInt(comp.entryFeePayers)} paid · one per account` : "nothing to pay"}</small></div>
-      <div><span>Closes in</span><strong class="${urgent ? "red" : ""}" data-countdown="${escapeHtml(comp.deadline)}">${leftExact(comp.deadline)}</strong><small>ends ${stamp(comp.deadline)}</small></div>
-      <div><span>Entries</span><strong>${fmtInt(comp.submissionCount)}</strong><small>${lastHour != null ? `${fmtInt(lastHour)} in the past hour` : "the judge's win rate decides"}</small></div>
+      <div><span>Pot now</span><strong class="green">${currentPot(comp)}</strong><small>${usd(comp.rewardAmount)} prize + ${usd(comp.entryFeesUsd ?? 0)} from fees</small></div>
+      <div><span>To enter</span><strong>${paid ? usd(comp.entryFeeUsd) : "Free"}</strong><small>${feeNote}</small></div>
+      <div><span>Closes in</span><strong class="${closingSoon ? "red" : ""}" data-countdown="${escapeHtml(comp.deadline)}">${leftExact(comp.deadline)}</strong><small>ends ${stamp(comp.deadline)}</small></div>
+      <div><span>Entries</span><strong>${fmtInt(comp.submissionCount)}</strong><small>${hourNote}</small></div>
     </div>
     <p class="cta"><a class="btn go" href="https://make.fun/bounty/${encodeURIComponent(comp.slug)}">Enter this bounty ↗</a>
     <a class="btn ghost" href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Full leaderboard · ${fmtInt(comp.submissionCount)} entries →</a></p>
-    <h3>Rewards <span class="h-sub">${fmtInt((comp.rewardsNow ?? []).length)} places split the pot of ${potNow(comp)}</span></h3>
-    ${rewardTable(comp)}
+    <h3>Rewards <span class="h-sub">${fmtInt((comp.rewardsNow ?? []).length)} places split the pot of ${currentPot(comp)}</span></h3>
+    ${rewardsTable(comp)}
     <h3>Dates &amp; phases</h3>
-    ${phaseTrack(comp)}
+    ${phaseStrip(comp)}
     <h3>Top 5 <span class="h-sub">by judge win rate</span></h3>
-    ${topFive(comp, top5)}`;
+    ${topFiveTable(comp, top5)}`;
 }
 
 // The board: ticker, stats, controls, the list, and the selected bounty.
@@ -267,7 +281,7 @@ export function boardPage(data, state) {
   const finished = items.filter((c) => !openNow(c));
   const ended = state.ended ? [...finished, ...state.ended] : finished;
   const shown = state.tab === "ended" ? ended : live;
-  const ordered = orderBy(shown, state.sort);
+  const ordered = sortList(shown, state.sort);
   const query = (state.q ?? "").trim().toLowerCase();
   const byCat =
     state.cat && state.cat !== "All"
@@ -299,9 +313,22 @@ export function boardPage(data, state) {
         (s) => new Date(s.createdAt).getTime() > hourAgo,
       ).length
     : null;
+  const rowsHtml =
+    matches.length === 0
+      ? '<p class="empty">Nothing matches that search.</p>'
+      : `<ul class="rows">${matches.map((c) => listRow(c, c.slug === state.selected)).join("")}</ul>`;
+  const detailHtml = selected
+    ? `
+        <p class="d-crumbs">Board / ${escapeHtml(selected.category ?? "")} · ${stateBadge(selected)}</p>
+        <h2 class="d-title">${escapeHtml(selected.title)}</h2>
+        <p class="d-sum">${escapeHtml(selected.summary ?? "")}</p>
+        ${detailBlock(selected, top5, lastHour)}
+        <div class="prose clamp">${miniMd(selected.description ?? "")}</div>
+        <p><a href="#/bounty/${encodeURIComponent(selected.slug)}">Open the full bounty page →</a></p>`
+    : '<p class="empty">Pick a bounty to see it here.</p>';
   return `
-    ${liveTicker(live, full)}
-    ${statStrip(live)}
+    ${activityTicker(live, full)}
+    ${statsStrip(live)}
     <div class="controls">
       <div class="tabs" role="tablist">
         <button type="button" role="tab" data-action="tab" data-tab="live" ${state.tab === "live" ? 'class="on" aria-selected="true"' : ""}>Open ${fmtInt(live.length)}</button>
@@ -322,16 +349,10 @@ export function boardPage(data, state) {
     </div>
     <div class="split">
       <div class="list-col">
-        ${matches.length === 0 ? '<p class="empty">Nothing matches that search.</p>' : `<ul class="rows">${matches.map((c) => bountyRow(c, c.slug === state.selected)).join("")}</ul>`}
+        ${rowsHtml}
       </div>
       <aside class="detail" aria-label="Selected bounty">
-        ${selected ? `
-        <p class="d-crumbs">Board / ${escapeHtml(selected.category ?? "")} · ${statusPill(selected)}</p>
-        <h2 class="d-title">${escapeHtml(selected.title)}</h2>
-        <p class="d-sum">${escapeHtml(selected.summary ?? "")}</p>
-        ${detailBlock(selected, top5, lastHour)}
-        <div class="prose clamp">${miniMd(selected.description ?? "")}</div>
-        <p><a href="#/bounty/${encodeURIComponent(selected.slug)}">Open the full bounty page →</a></p>` : '<p class="empty">Pick a bounty to see it here.</p>'}
+        ${detailHtml}
       </aside>
     </div>
     <p class="note">Pots grow when entry fees come in. A bounty past its deadline counts as finished even if it still shows as open, until results are out.</p>`;
@@ -348,20 +369,26 @@ export function bountyPage(comp, top5) {
     .slice()
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 8);
+  const rulesHtml = comp.rules
+    ? `<details class="rules"><summary>Read the full rules</summary><div class="prose">${miniMd(comp.rules)}</div></details>`
+    : "";
+  const recentHtml = recent.length
+    ? `<h2>Latest entries</h2><ul class="recent">${recent.map((s) => `<li><a href="#/profile/${encodeURIComponent(s.hunter)}">@${escapeHtml(s.hunter)}</a> — ${escapeHtml(s.title ?? "")} · <span data-createdat="${escapeHtml(s.createdAt)}">${since(s.createdAt)}</span>${s.status ? ` · ${escapeHtml(s.status)}` : ""}</li>`).join("")}</ul>`
+    : "";
   return `
     <p class="crumbs"><a href="#/">← Every bounty</a> · <a href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Standings →</a></p>
     <h1>${escapeHtml(comp.title)}</h1>
     <p class="lede">${escapeHtml(comp.summary ?? "")}</p>
-    <p class="tags">${statusPill(comp)}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${(comp.skills ?? []).map((s) => `<span class="tag">${escapeHtml(s)}</span>`).join("")}</p>
+    <p class="tags">${stateBadge(comp)}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${(comp.skills ?? []).map((s) => `<span class="tag">${escapeHtml(s)}</span>`).join("")}</p>
     ${detailBlock(comp, top5, lastHour)}
     <h2>About this bounty</h2>
     <div class="prose">${miniMd(comp.description ?? "")}</div>
-    ${comp.rules ? `<details class="rules"><summary>Read the full rules</summary><div class="prose">${miniMd(comp.rules)}</div></details>` : ""}
-    ${recent.length ? `<h2>Latest entries</h2><ul class="recent">${recent.map((s) => `<li><a href="#/profile/${encodeURIComponent(s.hunter)}">@${escapeHtml(s.hunter)}</a> — ${escapeHtml(s.title ?? "")} · <span data-createdat="${escapeHtml(s.createdAt)}">${since(s.createdAt)}</span>${s.status ? ` · ${escapeHtml(s.status)}` : ""}</li>`).join("")}</ul>` : ""}`;
+    ${rulesHtml}
+    ${recentHtml}`;
 }
 
 // One row of a leaderboard table.
-function standingRow(entry, comp) {
+function leaderRow(entry, comp) {
   const vals = entry.values ?? entry;
   const rate = entry.value != null ? winPct(entry.value) : winPct(vals.judge);
   const low =
@@ -371,16 +398,19 @@ function standingRow(entry, comp) {
       ? winPct(entry.interval.high)
       : winPct(vals.judge_high);
   const size = entry.values?.bytes ?? vals.bytes;
-  const img = avatarSrc(entry.image);
+  const img = avatarUrl(entry.image);
+  const pic = img
+    ? `<img crossorigin="anonymous" src="${escapeHtml(img)}" alt="" width="28" height="28" loading="lazy">`
+    : "";
   const status =
     entry.status ?? (entry.judged === false ? "not judged" : "judged");
   return `
     <tr>
       <td>${fmtInt(entry.rank ?? entry.performance)}</td>
-      <td class="entrant">${img ? `<img crossorigin="anonymous" src="${escapeHtml(img)}" alt="" width="28" height="28" loading="lazy">` : ""}<a href="#/profile/${encodeURIComponent(entry.handle)}">${escapeHtml(entry.handle)}</a><span class="entry-title">${escapeHtml(entry.title ?? "")}</span></td>
+      <td class="entrant">${pic}<a href="#/profile/${encodeURIComponent(entry.handle)}">${escapeHtml(entry.handle)}</a><span class="entry-title">${escapeHtml(entry.title ?? "")}</span></td>
       <td><strong>${rate}</strong></td>
       <td>${low} – ${high}</td>
-      <td><strong class="green">${prizeFor(comp, entry.prize_rank ?? entry.rank)}</strong></td>
+      <td><strong class="green">${prizeAt(comp, entry.prize_rank ?? entry.rank)}</strong></td>
       <td>${fmtBytes(size)}</td>
       <td>${escapeHtml(status)}</td>
     </tr>`;
@@ -392,15 +422,23 @@ export function standingsPage(comp, lb, shown) {
   const rest = lb.rest ?? [];
   const all = first.concat(rest);
   const page = all.slice(0, shown);
+  const more =
+    shown < all.length
+      ? `<p><button type="button" data-action="more-lb">Show more (${fmtInt(Math.min(25, all.length - shown))} more of ${fmtInt(all.length - shown)})</button></p>`
+      : `<p class="note">That is all ${fmtInt(all.length)} entries.</p>`;
+  const table =
+    all.length === 0
+      ? '<p class="empty">No entries placed yet.</p>'
+      : `<table class="lb">
+      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>90% range</th><th>Pays now</th><th>Size</th><th>Status</th></tr></thead>
+      <tbody>${page.map((e) => leaderRow(e, comp)).join("")}</tbody>
+    </table>
+    ${more}`;
   return `
     <p class="crumbs"><a href="#/">← Every bounty</a> · <a href="#/bounty/${encodeURIComponent(comp.slug)}">${escapeHtml(comp.title)}</a></p>
     <h1>Standings — ${escapeHtml(comp.title)}</h1>
     <p class="lede">${fmtInt(all.length)} entries placed · stage: ${escapeHtml(lb.phase?.title ?? lb.phase?.key ?? "")} · judge win rate with a 90% range · prize now is what each place pays out of the live pot</p>
-    ${all.length === 0 ? '<p class="empty">No entries placed yet.</p>' : `<table class="lb">
-      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>90% range</th><th>Pays now</th><th>Size</th><th>Status</th></tr></thead>
-      <tbody>${page.map((e) => standingRow(e, comp)).join("")}</tbody>
-    </table>
-    ${shown < all.length ? `<p><button type="button" data-action="more-lb">Show more (${fmtInt(Math.min(25, all.length - shown))} more of ${fmtInt(all.length - shown)})</button></p>` : `<p class="note">That is all ${fmtInt(all.length)} entries.</p>`}`}
+    ${table}
     <p class="note">Win rate is how often the judge picked an entry over the field. Tap a handle to open that entrant's profile.</p>`;
 }
 
@@ -408,18 +446,40 @@ export function standingsPage(comp, lb, shown) {
 export function profilePage(p) {
   const record = p.record ?? {};
   const entries = p.solutions ?? [];
+  const photo = p.image
+    ? `<img class="avatar" crossorigin="anonymous" src="${escapeHtml(p.image)}" alt="" width="96" height="96">`
+    : "";
+  const github = p.github_login
+    ? `<a href="https://github.com/${encodeURIComponent(p.github_login)}">GitHub ↗</a>`
+    : "";
+  const xLink = p.x
+    ? `<a href="https://x.com/${encodeURIComponent(p.x)}">X ↗</a>`
+    : "";
+  const discord = p.discord ? `<span>Discord: ${escapeHtml(p.discord)}</span>` : "";
+  const entriesHtml =
+    entries.length === 0
+      ? '<p class="empty">No entries so far.</p>'
+      : `<table class="lb"><thead><tr><th>Bounty</th><th>Entry</th><th>Place</th><th>Score</th><th>Prize</th><th>Entered</th></tr></thead>
+      <tbody>${entries.map((e) => `<tr>
+        <td><a href="#/bounty/${encodeURIComponent(e.competition?.slug ?? "")}">${escapeHtml(e.competition?.title ?? e.competition?.slug ?? "")}</a></td>
+        <td>${escapeHtml(e.title)}</td>
+        <td>${e.placement != null ? `#${fmtInt(e.placement)}` : "—"}</td>
+        <td>${e.score?.value != null ? winPct(e.score.value) : "—"}</td>
+        <td>${e.prize_usd != null ? usd(e.prize_usd) : "—"}</td>
+        <td>${dayDate(e.entered_at)}</td>
+      </tr>`).join("")}</tbody></table>`;
   return `
     <p class="crumbs"><a href="#/">← Every bounty</a></p>
     <div class="who">
-      ${p.image ? `<img class="avatar" crossorigin="anonymous" src="${escapeHtml(p.image)}" alt="" width="96" height="96">` : ""}
+      ${photo}
       <div>
         <h1>${escapeHtml(p.display_name ?? p.handle)}</h1>
         <p class="handle">@${escapeHtml(p.handle)}</p>
         ${p.bio ? `<p>${escapeHtml(p.bio)}</p>` : ""}
         <p class="links">
-          ${p.github_login ? `<a href="https://github.com/${encodeURIComponent(p.github_login)}">GitHub ↗</a>` : ""}
-          ${p.x ? `<a href="https://x.com/${encodeURIComponent(p.x)}">X ↗</a>` : ""}
-          ${p.discord ? `<span>Discord: ${escapeHtml(p.discord)}</span>` : ""}
+          ${github}
+          ${xLink}
+          ${discord}
           <span>Joined ${dayDate(p.joined_at)}</span>
         </p>
       </div>
@@ -433,13 +493,5 @@ export function profilePage(p) {
       <dt>Winnings</dt><dd>${usd(record.prize_usd ?? 0)}</dd>
     </dl>
     <h2>Entries (${fmtInt(entries.length)})</h2>
-    ${entries.length === 0 ? '<p class="empty">No entries so far.</p>' : `<table class="lb"><thead><tr><th>Bounty</th><th>Entry</th><th>Place</th><th>Score</th><th>Prize</th><th>Entered</th></tr></thead>
-      <tbody>${entries.map((e) => `<tr>
-        <td><a href="#/bounty/${encodeURIComponent(e.competition?.slug ?? "")}">${escapeHtml(e.competition?.title ?? e.competition?.slug ?? "")}</a></td>
-        <td>${escapeHtml(e.title)}</td>
-        <td>${e.placement != null ? `#${fmtInt(e.placement)}` : "—"}</td>
-        <td>${e.score?.value != null ? winPct(e.score.value) : "—"}</td>
-        <td>${e.prize_usd != null ? usd(e.prize_usd) : "—"}</td>
-        <td>${dayDate(e.entered_at)}</td>
-      </tr>`).join("")}</tbody></table>`}`;
+    ${entriesHtml}`;
 }

@@ -1,109 +1,112 @@
-// A tiny client for the make.fun public API: one fetch per page, answers
-// cached in memory for a minute and revalidated with ETags after that, so a
-// revisit inside the minute costs no request and a 304 after it costs no
-// body. Identical in-flight requests share one fetch. Requests give up
-// after 30 seconds instead of hanging.
+// The make.fun public API, behind a tiny cache.
 //
-// The footer shows the real counts for the page you are on, via fetchStats().
+// Rules of this client:
+//  - one fetch per page; identical requests that are already flying share
+//    the same promise instead of starting a second fetch;
+//  - an answer stays fresh in memory for 60 seconds, and after that it is
+//    revalidated with an ETag, so a 304 costs no body;
+//  - a request that hangs is abandoned after 30 seconds.
+//
+// fetchStats() exposes the real counts for the footer line.
 
-const BASE = "https://make.fun/api";
-const FRESH_MS = 60 * 1000;
-const TIMEOUT_MS = 30 * 1000;
+const API_ROOT = "https://make.fun/api";
+const FRESH_FOR_MS = 60_000;
+const GIVE_UP_MS = 30_000;
 
-const cache = new Map(); // url -> { data, etag, at }
-const pending = new Map(); // url -> promise
-const counters = { req: 0, notMod: 0, mem: 0, at: 0 };
+// url -> { body, etag, fetchedAt }
+const answers = new Map();
+// url -> in-flight promise
+const flying = new Map();
+const tally = { requests: 0, revalidated: 0, memory: 0, lastAt: 0 };
 
 export function fetchStats() {
-  return { ...counters };
+  return { req: tally.requests, notMod: tally.revalidated, mem: tally.memory, at: tally.lastAt };
 }
 
 export function resetStats() {
-  counters.req = 0;
-  counters.notMod = 0;
-  counters.mem = 0;
-  counters.at = 0;
+  tally.requests = 0;
+  tally.revalidated = 0;
+  tally.memory = 0;
+  tally.lastAt = 0;
 }
 
 export function flushCache() {
-  cache.clear();
+  answers.clear();
 }
 
-async function request(path) {
-  const hit = cache.get(path);
-  if (hit && Date.now() - hit.at < FRESH_MS) {
-    counters.mem++;
-    counters.at = Date.now();
-    return hit.data;
+async function get(path) {
+  const known = answers.get(path);
+  if (known && Date.now() - known.fetchedAt < FRESH_FOR_MS) {
+    tally.memory++;
+    tally.lastAt = Date.now();
+    return known.body;
   }
-  const shared = pending.get(path);
-  if (shared) return shared;
+  if (flying.has(path)) return flying.get(path);
 
-  const job = (async () => {
-    const headers = {};
-    if (hit?.etag) headers["If-None-Match"] = hit.etag;
-    counters.req++;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    let res;
+  const task = (async () => {
+    const headers = known?.etag ? { "If-None-Match": known.etag } : {};
+    tally.requests++;
+    const abort = new AbortController();
+    const clock = setTimeout(() => abort.abort(), GIVE_UP_MS);
+    let reply;
     try {
-      res = await fetch(BASE + path, { headers, signal: ctrl.signal });
+      reply = await fetch(API_ROOT + path, { headers, signal: abort.signal });
     } finally {
-      clearTimeout(timer);
+      clearTimeout(clock);
     }
-    if (res.status === 304 && hit) {
-      counters.notMod++;
-      counters.at = Date.now();
-      hit.at = Date.now();
-      return hit.data;
+    if (reply.status === 304 && known) {
+      tally.revalidated++;
+      tally.lastAt = Date.now();
+      known.fetchedAt = Date.now();
+      return known.body;
     }
-    if (!res.ok) {
-      const err = new Error(`make.fun API ${res.status} for ${path}`);
-      err.status = res.status;
-      throw err;
+    if (!reply.ok) {
+      const failure = new Error(`make.fun API ${reply.status} for ${path}`);
+      failure.status = reply.status;
+      throw failure;
     }
-    const data = await res.json();
-    counters.at = Date.now();
-    cache.set(path, { data, etag: res.headers.get("ETag"), at: Date.now() });
-    return data;
+    const body = await reply.json();
+    tally.lastAt = Date.now();
+    answers.set(path, {
+      body,
+      etag: reply.headers.get("ETag"),
+      fetchedAt: Date.now(),
+    });
+    return body;
   })();
 
-  pending.set(path, job);
+  flying.set(path, task);
   try {
-    return await job;
+    return await task;
   } finally {
-    pending.delete(path);
+    flying.delete(path);
   }
 }
 
-// The open board, with the activity times the ticker and the "past hour"
+// The open board, with the activity times the ticker and the past-hour
 // counts read from.
-export const listOpen = () => request("/competitions?status=open&activity=times");
+export const listOpen = () => get("/competitions?status=open&activity=times");
 
 // Closed / resolved bounties for the board's Closed tab, up to 500, newest
-// deadline first. Walks the cursor pages; a page that comes back empty
-// simply ends the walk.
+// deadline first. Walks the cursor pages; an empty page simply ends it.
 export async function listByStatus(status) {
-  const all = [];
+  const collected = [];
   let cursor = "";
-  for (let page = 0; page < 10 && all.length < 500; page++) {
-    const chunk = await request(
-      `/competitions?status=${status}&activity=times${
-        cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
-      }`,
-    );
-    all.push(...(chunk.items ?? []));
+  for (let page = 0; page < 10 && collected.length < 500; page++) {
+    const next = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const chunk = await get(`/competitions?status=${status}&activity=times${next}`);
+    collected.push(...(chunk.items ?? []));
     cursor = chunk.next_cursor ?? "";
     if (!cursor) break;
   }
-  return { items: all };
+  return { items: collected };
 }
 
 export const oneBounty = (slug) =>
-  request(`/competitions/${encodeURIComponent(slug)}`);
+  get(`/competitions/${encodeURIComponent(slug)}`);
 
 export const oneStandings = (slug) =>
-  request(`/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`);
+  get(`/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`);
 
 export const oneProfile = (handle) =>
-  request(`/profiles/${encodeURIComponent(handle)}`);
+  get(`/profiles/${encodeURIComponent(handle)}`);

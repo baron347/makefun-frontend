@@ -16,12 +16,12 @@ import { boardPage, bountyPage, standingsPage, profilePage } from "./views.js";
 import { left, leftExact, since } from "./format.js";
 
 const root = document.getElementById("app");
-const footerStatus = document.getElementById("api-status");
+const footerLine = document.getElementById("api-status");
 
 // What the board remembers while you use it: the search text, the tab, the
 // sort and category chips, which bounty is picked, and the detail data
 // already fetched for it.
-const ui = {
+const board = {
   q: "",
   tab: "live",
   sort: "closing",
@@ -34,19 +34,19 @@ const ui = {
 };
 
 let boardData = null;
-let shownRows = 25;
-let tickFast = null;
-let tickSlow = null;
+let rowsShown = 25;
+let fastTimer = null;
+let slowTimer = null;
 
-function startClocks() {
+function runClocks() {
   stopClocks();
-  tickFast = setInterval(() => {
+  fastTimer = setInterval(() => {
     for (const el of document.querySelectorAll("[data-countdown]")) {
       el.textContent = leftExact(el.dataset.countdown);
     }
-    paintFooter();
+    updateFooter();
   }, 1000);
-  tickSlow = setInterval(() => {
+  slowTimer = setInterval(() => {
     for (const el of root.querySelectorAll("[data-deadline]")) {
       el.textContent = left(el.dataset.deadline);
     }
@@ -57,24 +57,27 @@ function startClocks() {
 }
 
 function stopClocks() {
-  if (tickFast) clearInterval(tickFast);
-  if (tickSlow) clearInterval(tickSlow);
-  tickFast = tickSlow = null;
+  if (fastTimer) clearInterval(fastTimer);
+  if (slowTimer) clearInterval(slowTimer);
+  fastTimer = slowTimer = null;
 }
 
 // The footer line: real request counts for the page you are on.
-function paintFooter() {
-  if (!footerStatus) return;
+function updateFooter() {
+  if (!footerLine) return;
   const s = fetchStats();
-  const when = s.at ? `${Math.max(0, Math.round((Date.now() - s.at) / 1000))}s ago` : "—";
-  footerStatus.textContent = `This view: ${s.req} API request${s.req === 1 ? "" : "s"} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${when}`;
+  const ago = s.at
+    ? `${Math.max(0, Math.round((Date.now() - s.at) / 1000))}s ago`
+    : "—";
+  const plural = s.req === 1 ? "" : "s";
+  footerLine.textContent = `This view: ${s.req} API request${plural} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${ago}`;
 }
 
-function showLoading(title) {
+function renderLoading(title) {
   root.innerHTML = `<h1>${title}</h1><p class="loading">Loading live data from make.fun…</p>`;
 }
 
-function showError(err, retryKey) {
+function renderError(err, retryKey) {
   const missing = err?.status === 404;
   root.innerHTML = `
     <h1>${missing ? "Not found" : "Could not load this page"}</h1>
@@ -87,70 +90,74 @@ function showError(err, retryKey) {
 // Fetch the picked bounty's full record and its top 5, once each, so the
 // detail pane can show them. A failure here is not fatal: the pane falls
 // back to the list's own data.
-async function fillSelected(slug) {
+async function loadDetail(slug) {
   if (!slug) return;
-  if (!ui.full[slug]) {
+  if (!board.full[slug]) {
     try {
-      ui.full[slug] = await oneBounty(slug);
-    } catch {}
+      board.full[slug] = await oneBounty(slug);
+    } catch {
+      // detail pane falls back to the list row's data
+    }
   }
-  if (!ui.top5[slug]) {
+  if (!board.top5[slug]) {
     try {
       const lb = await oneStandings(slug);
-      ui.top5[slug] = (lb.entries ?? []).slice(0, 5);
+      board.top5[slug] = (lb.entries ?? []).slice(0, 5);
     } catch {
-      ui.top5[slug] = [];
+      board.top5[slug] = [];
     }
   }
 }
 
-async function paintBoard() {
-  showLoading("Open bounties");
+async function showBoard() {
+  renderLoading("Open bounties");
   try {
     resetStats();
     boardData = await listOpen();
-    if (!ui.selected) {
+    if (!board.selected) {
       const items = boardData.items ?? [];
-      ui.selected = items.some((c) => c.slug === "makefun-frontend-01")
+      board.selected = items.some((c) => c.slug === "makefun-frontend-01")
         ? "makefun-frontend-01"
         : items[0]?.slug ?? null;
     }
     document.title = "Open bounties | make.fun";
-    await fillSelected(ui.selected);
-    await refreshEnded();
-    root.innerHTML = boardPage(boardData, ui);
-    bindSearch();
-    startClocks();
-    paintFooter();
+    await loadDetail(board.selected);
+    await loadEnded();
+    root.innerHTML = boardPage(boardData, board);
+    wireSearch();
+    runClocks();
+    updateFooter();
   } catch (err) {
-    return void showError(err, "board");
+    return void renderError(err, "board");
   }
   window.__shotReady = true;
 }
 
 // The Closed tab's extra pages: closed + resolved, newest deadline first.
 // A failed fetch is tried once more after a short pause, then left empty.
-async function refreshEnded() {
-  if (ui.ended || ui.endedBusy) return;
-  ui.endedBusy = true;
+async function loadEnded() {
+  if (board.ended || board.endedBusy) return;
+  board.endedBusy = true;
   try {
-    const fetchBoth = async () => {
+    const fetchEnded = async () => {
       const closed = await listByStatus("closed").catch(() => ({ items: [] }));
-      const resolved = await listByStatus("resolved").catch(() => ({ items: [] }));
+      const resolved = await listByStatus("resolved").catch(() => ({
+        items: [],
+      }));
       return [...closed.items, ...resolved.items].sort(
         (a, b) => new Date(b.deadline) - new Date(a.deadline),
       );
     };
-    let rows = await fetchBoth();
+    let rows = await fetchEnded();
     if (rows.length === 0) {
       await new Promise((r) => setTimeout(r, 2000));
-      rows = await fetchBoth();
+      rows = await fetchEnded();
     }
-    ui.ended = rows;
+    board.ended = rows;
   } catch {
     // The Closed tab simply stays with what the open list already had.
   } finally {
-    ui.endedBusy = false;
+    board.endedBusy = false;
   }
 }
 
@@ -158,18 +165,18 @@ async function refreshEnded() {
 // refetching, keeping the scroll position.
 function repaintBoard() {
   const y = window.scrollY;
-  root.innerHTML = boardPage(boardData, ui);
-  bindSearch();
+  root.innerHTML = boardPage(boardData, board);
+  wireSearch();
   window.scrollTo(0, y);
-  paintFooter();
+  updateFooter();
 }
 
-function bindSearch() {
+function wireSearch() {
   const input = document.getElementById("q");
   if (!input) return;
   input.addEventListener("input", () => {
     const caret = input.selectionStart;
-    ui.q = input.value;
+    board.q = input.value;
     repaintBoard();
     const again = document.getElementById("q");
     again.focus();
@@ -177,54 +184,54 @@ function bindSearch() {
   });
 }
 
-async function paintBounty(slug) {
-  showLoading("Bounty");
+async function showBounty(slug) {
+  renderLoading("Bounty");
   try {
     resetStats();
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
     document.title = `${comp.title} | make.fun`;
     root.innerHTML = bountyPage(comp, (lb.entries ?? []).slice(0, 5));
-    startClocks();
-    paintFooter();
+    runClocks();
+    updateFooter();
   } catch (err) {
-    return void showError(err, `bounty:${slug}`);
+    return void renderError(err, `bounty:${slug}`);
   }
   window.__shotReady = true;
 }
 
-async function paintStandings(slug) {
-  showLoading("Leaderboard");
+async function showStandings(slug) {
+  renderLoading("Leaderboard");
   try {
     resetStats();
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
     document.title = `Leaderboard — ${comp.title} | make.fun`;
-    shownRows = 25;
-    root.innerHTML = standingsPage(comp, lb, shownRows);
+    rowsShown = 25;
+    root.innerHTML = standingsPage(comp, lb, rowsShown);
     root.dataset.lbSlug = slug;
-    paintFooter();
+    updateFooter();
   } catch (err) {
-    return void showError(err, `leaderboard:${slug}`);
+    return void renderError(err, `leaderboard:${slug}`);
   }
   window.__shotReady = true;
 }
 
-async function paintProfile(handle) {
-  showLoading("Profile");
+async function showProfile(handle) {
+  renderLoading("Profile");
   try {
     resetStats();
     const p = await oneProfile(handle);
     document.title = `@${p.handle} | make.fun`;
     root.innerHTML = profilePage(p);
-    paintFooter();
+    updateFooter();
   } catch (err) {
-    return void showError(err, `profile:${handle}`);
+    return void renderError(err, `profile:${handle}`);
   }
   window.__shotReady = true;
 }
 
 // Drop images that fail to load (a missing avatar should vanish, not show
 // a broken icon).
-function dropBrokenImages() {
+function pruneBrokenImages() {
   for (const img of root.querySelectorAll("img")) {
     if (img.complete && img.naturalWidth === 0) {
       img.remove();
@@ -236,8 +243,11 @@ function dropBrokenImages() {
 
 // "#/bounty/<slug>/leaderboard", "#/bounty/<slug>", "#/profile/<handle>",
 // anything else is the board.
-function parseHash() {
-  const parts = (location.hash || "#/").replace(/^#\//, "").split("/").map(decodeURIComponent);
+function readRoute() {
+  const parts = (location.hash || "#/")
+    .replace(/^#\//, "")
+    .split("/")
+    .map(decodeURIComponent);
   if (parts[0] === "bounty" && parts[1] && parts[2] === "leaderboard") {
     return { name: "leaderboard", slug: parts[1] };
   }
@@ -249,12 +259,12 @@ function parseHash() {
 async function route() {
   window.__shotReady = false;
   stopClocks();
-  const r = parseHash();
-  if (r.name === "bounty") await paintBounty(r.slug);
-  else if (r.name === "leaderboard") await paintStandings(r.slug);
-  else if (r.name === "profile") await paintProfile(r.handle);
-  else await paintBoard();
-  dropBrokenImages();
+  const r = readRoute();
+  if (r.name === "bounty") await showBounty(r.slug);
+  else if (r.name === "leaderboard") await showStandings(r.slug);
+  else if (r.name === "profile") await showProfile(r.handle);
+  else await showBoard();
+  pruneBrokenImages();
   window.scrollTo(0, 0);
 }
 
@@ -267,39 +277,39 @@ root.addEventListener("click", async (ev) => {
     await route();
   } else if (action === "refresh") {
     flushCache();
-    ui.ended = null;
-    ui.top5 = {};
-    ui.full = {};
+    board.ended = null;
+    board.top5 = {};
+    board.full = {};
     await route();
   } else if (action === "tab") {
-    ui.tab = btn.dataset.tab;
-    if (ui.tab === "ended" && !ui.ended) {
-      refreshEnded().then(() => {
-        if (parseHash().name === "board") repaintBoard();
-        paintFooter();
+    board.tab = btn.dataset.tab;
+    if (board.tab === "ended" && !board.ended) {
+      loadEnded().then(() => {
+        if (readRoute().name === "board") repaintBoard();
+        updateFooter();
       });
     }
     repaintBoard();
   } else if (action === "sort") {
-    ui.sort = btn.dataset.sort;
+    board.sort = btn.dataset.sort;
     repaintBoard();
   } else if (action === "cat") {
-    ui.cat = btn.dataset.cat;
+    board.cat = btn.dataset.cat;
     repaintBoard();
   } else if (action === "select") {
     if (ev.target.closest("a[href]")) return; // the title link navigates instead
     const slug = btn.dataset.slug;
-    if (slug === ui.selected) return;
-    ui.selected = slug;
+    if (slug === board.selected) return;
+    board.selected = slug;
     repaintBoard();
-    await fillSelected(slug);
-    if (parseHash().name === "board" && ui.selected === slug) repaintBoard();
+    await loadDetail(slug);
+    if (readRoute().name === "board" && board.selected === slug) repaintBoard();
   } else if (action === "more-lb") {
-    shownRows += 25;
+    rowsShown += 25;
     const slug = root.dataset.lbSlug;
     try {
       const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
-      root.innerHTML = standingsPage(comp, lb, shownRows);
+      root.innerHTML = standingsPage(comp, lb, rowsShown);
     } catch {
       await route();
     }
@@ -308,7 +318,10 @@ root.addEventListener("click", async (ev) => {
 
 // Rows are keyboard-selectable too.
 root.addEventListener("keydown", (ev) => {
-  if ((ev.key === "Enter" || ev.key === " ") && ev.target.matches?.('.row[data-action="select"]')) {
+  if (
+    (ev.key === "Enter" || ev.key === " ") &&
+    ev.target.matches?.('.row[data-action="select"]')
+  ) {
     ev.preventDefault();
     ev.target.click();
   }

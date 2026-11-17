@@ -1,6 +1,7 @@
 /* Featherlight — a light, dense board for make.fun bounties.
-   Plain CSS, no framework: tokens first, then page chrome, then the four
-   surfaces (board, bounty, standings, profile), then small screens. */
+   Plain CSS, no framework. Tokens first, then the base, then page chrome,
+   then the board, bounty detail, tables, timeline and profile, then the
+   small-screen rules. */
 
 :root {
   --ink: #17181c;
@@ -168,6 +169,49 @@ h3 {
   border: 1px solid #f5c6c0;
 }
 
+/* ---- Buttons (shared by tabs, chips, CTAs) ---- */
+
+.btn,
+button {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn:hover,
+button:hover {
+  border-color: var(--accent);
+}
+
+.btn.go {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  padding: 12px 20px;
+  font-size: 16px;
+}
+
+.btn.go:hover {
+  background: var(--accent-dark);
+}
+
+.btn.ghost {
+  background: var(--card);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* ---- Live ticker and the four-number strip ---- */
 
 .ticker {
@@ -303,47 +347,6 @@ h3 {
   border-radius: 8px;
   font: inherit;
   background: var(--card);
-}
-
-.btn,
-button {
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-block;
-}
-
-.btn:hover,
-button:hover {
-  border-color: var(--accent);
-}
-
-.btn.go {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  padding: 12px 20px;
-  font-size: 16px;
-}
-
-.btn.go:hover {
-  background: var(--accent-dark);
-}
-
-.btn.ghost {
-  background: var(--card);
-  color: var(--accent);
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: wait;
 }
 
 /* ---- Board split: the list on the left, the detail pane on the right ---- */
@@ -617,33 +620,6 @@ button:disabled {
   margin: 0 0 4px;
 }
 
-/* ---- Profile facts ---- */
-
-.facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 8px 20px;
-  margin: 20px 0;
-  padding: 16px 18px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-}
-
-.facts dt {
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.facts dd {
-  margin: 0;
-}
-
-.facts .pot {
-  font-size: 20px;
-  color: var(--accent);
-}
-
 /* ---- Tables: rewards, top 5, standings, profile entries ---- */
 
 table {
@@ -862,6 +838,33 @@ th {
   gap: 6px 16px;
   font-size: 14px;
   color: var(--muted);
+}
+
+/* ---- Profile facts ---- */
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 20px;
+  margin: 20px 0;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.facts dt {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.facts .pot {
+  font-size: 20px;
+  color: var(--accent);
 }
 
 /* ---- Small screens ---- */
