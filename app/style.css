@@ -1,26 +1,26 @@
 /* Featherlight — a light, dense board for make.fun bounties.
-   Plain CSS, no framework. Tokens first, then the base, then page chrome,
-   then the board, bounty detail, tables, timeline and profile, then the
-   small-screen rules. */
+   Plain CSS, no framework, no build step. The file is organised in layers:
+   design tokens, the page skeleton, shared text and buttons, then one
+   section per view (ticker and numbers, board tools, the bounty list, the
+   detail pane, tables, the timeline, prose and profile), and finally the
+   small-screen rules that stack everything. */
 
 :root {
-  --ink: #16181d;
-  --muted: #5c616c;
-  --line: #e4e6ea;
-  --accent: #0b6e36;
-  --accent-dark: #085a2b;
-  --accent-soft: #e3f3e9;
-  --good: #0b6e36;
-  --good-soft: #e3f3e9;
-  --warn: #8a5a00;
-  --warn-soft: #fdf1d7;
-  --hot: #c22e2e;
-  --hot-soft: #fdecea;
-  --end: #6b7280;
-  --end-soft: #eceef1;
-  --card: #ffffff;
-  --bg: #f7f8f7;
-  --shadow: 0 1px 2px rgb(22 24 29 / 0.05), 0 1px 6px rgb(22 24 29 / 0.04);
+  --fg: #17191e;
+  --sub: #5b606b;
+  --edge: #e3e5e9;
+  --leaf: #0b6e36;
+  --leaf-deep: #075a2a;
+  --leaf-tint: #e2f2e8;
+  --amber: #8a5a00;
+  --amber-tint: #fdf0d3;
+  --rose: #bf2d2d;
+  --rose-tint: #fdecea;
+  --stone: #6b7280;
+  --stone-tint: #eceef1;
+  --paper: #ffffff;
+  --wash: #f6f7f6;
+  --lift: 0 1px 2px rgb(23 25 30 / 0.05), 0 1px 6px rgb(23 25 30 / 0.04);
 }
 
 * {
@@ -29,28 +29,37 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--wash);
+  color: var(--fg);
   font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 a {
-  color: var(--accent);
+  color: var(--leaf);
 }
 
 a:hover {
   text-decoration-thickness: 2px;
 }
 
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--leaf);
+  outline-offset: 2px;
+}
+
 .green {
-  color: var(--good);
+  color: var(--leaf);
 }
 
 .red {
-  color: var(--hot);
+  color: var(--rose);
 }
 
-/* ---- Page chrome: header, main column, footer ---- */
+/* ---- Page skeleton: masthead, column, footer ---- */
 
 .top {
   display: flex;
@@ -60,12 +69,12 @@ a:hover {
   max-width: 1240px;
   margin: 0 auto;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--line);
-  background: var(--card);
+  border-bottom: 1px solid var(--edge);
+  background: var(--paper);
 }
 
 .brand {
-  color: var(--ink);
+  color: var(--fg);
   font-size: 20px;
   font-weight: 800;
   text-decoration: none;
@@ -73,12 +82,12 @@ a:hover {
 }
 
 .brand .mark {
-  color: var(--accent);
+  color: var(--leaf);
   font-style: normal;
 }
 
 .brand em {
-  color: var(--muted);
+  color: var(--sub);
   font-size: 15px;
   font-style: normal;
   font-weight: 600;
@@ -100,8 +109,8 @@ footer {
   max-width: 1240px;
   margin: 0 auto;
   padding: 14px 20px 32px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
+  border-top: 1px solid var(--edge);
+  color: var(--sub);
   font-size: 14px;
 }
 
@@ -110,11 +119,11 @@ footer p {
 }
 
 #api-status {
-  color: var(--ink);
+  color: var(--fg);
   font-weight: 600;
 }
 
-/* ---- Headings and small text ---- */
+/* ---- Headings, captions and states ---- */
 
 h1 {
   font-size: 30px;
@@ -133,31 +142,31 @@ h3 {
   margin: 18px 0 6px;
 }
 
-.h-sub {
-  color: var(--muted);
+.sub-note {
+  color: var(--sub);
   font-size: 13px;
   font-weight: 400;
 }
 
 .lede {
-  color: var(--muted);
+  color: var(--sub);
   font-size: 17px;
   margin: 0 0 16px;
 }
 
-.pagehead {
+.intro {
   margin: 18px 0 2px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--edge);
 }
 
-.pagehead h1 {
+.intro h1 {
   margin: 0 0 4px;
 }
 
-.pagehead p {
+.intro p {
   margin: 0;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 15px;
 }
 
@@ -167,15 +176,15 @@ h3 {
 }
 
 .note {
-  color: var(--muted);
+  color: var(--sub);
   font-size: 14px;
 }
 
 .empty {
   padding: 24px;
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--edge);
   border-radius: 10px;
-  color: var(--muted);
+  color: var(--sub);
 }
 
 .error,
@@ -185,23 +194,23 @@ h3 {
 }
 
 .loading {
-  background: var(--accent-soft);
+  background: var(--leaf-tint);
 }
 
 .error {
-  background: var(--hot-soft);
+  background: var(--rose-tint);
   border: 1px solid #f5c6c0;
 }
 
-/* ---- Buttons (shared by tabs, chips, CTAs) ---- */
+/* ---- Buttons ---- */
 
 .btn,
 button {
   padding: 9px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
-  background: var(--card);
-  color: var(--ink);
+  background: var(--paper);
+  color: var(--fg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -211,25 +220,25 @@ button {
 
 .btn:hover,
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--leaf);
 }
 
-.btn.go {
-  background: var(--accent);
-  border-color: var(--accent);
+.btn.primary {
+  background: var(--leaf);
+  border-color: var(--leaf);
   color: #fff;
   padding: 12px 20px;
   font-size: 16px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift);
 }
 
-.btn.go:hover {
-  background: var(--accent-dark);
+.btn.primary:hover {
+  background: var(--leaf-deep);
 }
 
-.btn.ghost {
-  background: var(--card);
-  color: var(--accent);
+.btn.quiet {
+  background: var(--paper);
+  color: var(--leaf);
 }
 
 button:disabled {
@@ -237,65 +246,66 @@ button:disabled {
   cursor: wait;
 }
 
-/* ---- Live ticker and the four-number strip ---- */
+/* ---- Live feed and the four-number strip ---- */
 
-.ticker {
+.feed {
   margin: 10px 0 0;
   padding: 6px 0 10px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--edge);
   font-size: 13.5px;
-  color: var(--muted);
+  color: var(--sub);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .live-dot {
-  color: var(--good);
+  color: var(--leaf);
 }
 
-.stats {
+.kpis {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin: 12px 0 4px;
 }
 
-.stats > div {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-top: 3px solid var(--accent);
+.kpis > div {
+  background: var(--paper);
+  border: 1px solid var(--edge);
+  border-top: 3px solid var(--leaf);
   border-radius: 10px;
   padding: 8px 12px 10px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift);
 }
 
-.stats span {
+.kpis span {
   display: block;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.stats strong {
+.kpis strong {
+  display: block;
   font-size: 20px;
   letter-spacing: -0.02em;
 }
 
-.stats small {
+.kpis small {
   display: block;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* ---- Board controls: tabs, search, sort and kind chips ---- */
+/* ---- Board tools: tabs, search, sort and kind pills ---- */
 
-.controls {
+.toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -303,34 +313,34 @@ button:disabled {
   margin: 14px 0 10px;
 }
 
-.tabs {
+.seg {
   display: flex;
   gap: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
   overflow: hidden;
 }
 
-.tabs button {
+.seg button {
   border: 0;
   border-radius: 0;
-  background: var(--card);
+  background: var(--paper);
   padding: 8px 16px;
 }
 
-.tabs button.on {
-  background: var(--ink);
+.seg button.on {
+  background: var(--fg);
   color: #fff;
 }
 
-.chiprows {
+.pillrows {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 22px;
   margin: 0 0 10px;
 }
 
-.chips {
+.pillrow {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -339,26 +349,26 @@ button:disabled {
   font-size: 14px;
 }
 
-.chips > span {
-  color: var(--muted);
+.pillrow > span {
+  color: var(--sub);
   font-weight: 600;
   margin-right: 2px;
 }
 
-.chips button {
+.pillrow button {
   padding: 5px 12px;
   border-radius: 999px;
   font-size: 13.5px;
   font-weight: 600;
 }
 
-.chips button.on {
-  background: var(--accent);
-  border-color: var(--accent);
+.pillrow button.on {
+  background: var(--leaf);
+  border-color: var(--leaf);
   color: #fff;
 }
 
-.search {
+.finder {
   flex: 1 1 260px;
   display: flex;
   align-items: center;
@@ -366,66 +376,66 @@ button:disabled {
   font-weight: 600;
 }
 
-.search input {
+.finder input {
   flex: 1;
   min-width: 0;
   padding: 9px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
   border-radius: 8px;
   font: inherit;
-  background: var(--card);
+  background: var(--paper);
 }
 
-.search input:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
+.finder input:focus {
+  outline: 2px solid var(--leaf-tint);
+  border-color: var(--leaf);
 }
 
 /* ---- Board split: the list on the left, the detail pane on the right ---- */
 
-.split {
+.duo {
   display: grid;
   grid-template-columns: minmax(460px, 6fr) 6fr;
   gap: 16px;
   align-items: start;
 }
 
-.list-col {
+.rail {
   max-height: 560px;
   overflow-y: auto;
   padding-right: 2px;
 }
 
-.detail {
+.peek {
   max-height: 560px;
   overflow-y: auto;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--edge);
   border-radius: 12px;
   padding: 16px 18px 18px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift);
 }
 
-.d-crumbs {
+.peek-crumbs {
   margin: 0 0 6px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--sub);
 }
 
-.d-title {
+.peek-title {
   margin: 0 0 6px;
   font-size: 22px;
   line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
-.d-sum {
-  color: var(--muted);
+.peek-sum {
+  color: var(--sub);
   margin: 0 0 14px;
   font-size: 15px;
 }
 
-.rows {
+.bounties {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -433,50 +443,50 @@ button:disabled {
   gap: 8px;
 }
 
-.row {
+.bounty-row {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 40px 84px 52px;
   gap: 8px;
   align-items: center;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--edge);
   border-radius: 10px;
   padding: 10px 12px;
   cursor: pointer;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift);
 }
 
-.row:hover {
-  border-color: var(--accent);
+.bounty-row:hover {
+  border-color: var(--leaf);
 }
 
-.row.on {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent), var(--shadow);
+.bounty-row.on {
+  border-color: var(--leaf);
+  box-shadow: inset 3px 0 0 var(--leaf), var(--lift);
   background: #f2faf4;
 }
 
-.r-pot {
+.cell-pot {
   font-size: 16px;
   font-weight: 800;
-  color: var(--good);
+  color: var(--leaf);
   letter-spacing: -0.01em;
 }
 
-.r-pot small {
+.cell-pot small {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--sub);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.r-main {
+.cell-main {
   min-width: 0;
 }
 
-.r-title {
+.cell-title {
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -485,8 +495,8 @@ button:disabled {
   line-height: 1.3;
 }
 
-.r-title a {
-  color: var(--ink);
+.cell-title a {
+  color: var(--fg);
   text-decoration: none;
   min-width: 0;
   overflow: hidden;
@@ -494,15 +504,15 @@ button:disabled {
   white-space: nowrap;
 }
 
-.r-title a:hover {
-  color: var(--accent);
+.cell-title a:hover {
+  color: var(--leaf);
   text-decoration: underline;
 }
 
-.r-sub {
+.cell-sub {
   display: block;
   margin-top: 2px;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 13px;
   line-height: 1.35;
   white-space: nowrap;
@@ -510,59 +520,59 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
-.r-fee {
+.cell-fee {
   font-size: 14px;
   font-weight: 600;
   text-align: right;
 }
 
-.r-time {
+.cell-time {
   font-size: 13.5px;
   font-weight: 600;
   text-align: right;
 }
 
-.r-time .bar {
+.cell-time .meter {
   display: block;
   margin-top: 4px;
 }
 
-.r-entries {
+.cell-count {
   text-align: right;
 }
 
-.r-entries strong {
+.cell-count strong {
   display: block;
   font-size: 16px;
 }
 
-.r-entries small {
-  color: var(--muted);
+.cell-count small {
+  color: var(--sub);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
-.bar {
+.meter {
   display: block;
   height: 4px;
   border-radius: 2px;
-  background: var(--line);
+  background: var(--edge);
   overflow: hidden;
 }
 
-.bar b {
+.meter b {
   display: block;
   height: 100%;
-  background: var(--good);
+  background: var(--leaf);
   border-radius: 2px;
 }
 
-.bar.hot b {
-  background: var(--hot);
+.meter.hot b {
+  background: var(--rose);
 }
 
-/* ---- Tags and status pills ---- */
+/* ---- Tags and status flags ---- */
 
 .tags {
   display: flex;
@@ -574,17 +584,17 @@ button:disabled {
 .tag {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--end-soft);
-  color: var(--muted);
+  background: var(--stone-tint);
+  color: var(--sub);
   font-size: 13px;
 }
 
-.r-sub .badge,
-.r-sub .tag {
+.cell-sub .flag,
+.cell-sub .tag {
   margin-right: 6px;
 }
 
-.badge {
+.flag {
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 12px;
@@ -592,61 +602,61 @@ button:disabled {
   white-space: nowrap;
 }
 
-.badge.open {
-  background: var(--good-soft);
-  color: var(--good);
+.flag.open {
+  background: var(--leaf-tint);
+  color: var(--leaf);
 }
 
-.badge.soon {
-  background: var(--warn-soft);
-  color: var(--warn);
+.flag.soon {
+  background: var(--amber-tint);
+  color: var(--amber);
 }
 
-.badge.ended {
-  background: var(--end-soft);
-  color: var(--end);
+.flag.done {
+  background: var(--stone-tint);
+  color: var(--stone);
 }
 
-/* ---- Bounty detail: stat cards, entry buttons ---- */
+/* ---- Bounty detail: metric cards and entry actions ---- */
 
-.cards {
+.metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 10px;
   margin: 0 0 14px;
 }
 
-.cards > div {
-  border: 1px solid var(--line);
+.metrics > div {
+  border: 1px solid var(--edge);
   border-radius: 10px;
   padding: 8px 10px;
-  background: var(--card);
+  background: var(--paper);
 }
 
-.cards span {
+.metrics span {
   display: block;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.cards strong {
+.metrics strong {
   display: block;
   font-size: 19px;
   letter-spacing: -0.02em;
   margin: 2px 0;
 }
 
-.cards small {
+.metrics small {
   display: block;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 12px;
   line-height: 1.35;
 }
 
-.cta {
+.actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -654,67 +664,67 @@ button:disabled {
   margin: 0 0 4px;
 }
 
-/* ---- Tables: rewards, top 5, standings, profile entries ---- */
+/* ---- Tables: payouts, top 5, standings, profile entries ---- */
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--card);
+  background: var(--paper);
   font-size: 15px;
 }
 
 td,
 th {
   padding: 7px 10px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--edge);
   text-align: left;
   vertical-align: middle;
 }
 
 th {
-  color: var(--muted);
+  color: var(--sub);
   font-size: 12.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.rewards {
+.payouts {
   max-width: 640px;
 }
 
-.pays {
+.share-bar {
   display: inline-block;
   width: 84px;
   height: 8px;
   border-radius: 4px;
-  background: var(--line);
+  background: var(--edge);
   overflow: hidden;
   vertical-align: middle;
   margin-right: 8px;
 }
 
-.pays i {
+.share-bar i {
   display: block;
   height: 100%;
-  background: var(--good);
+  background: var(--leaf);
   border-radius: 4px;
 }
 
-.lb {
+.standings {
   display: block;
   overflow-x: auto;
 }
 
-.lb td:first-child {
+.standings td:first-child {
   white-space: nowrap;
 }
 
-.lb .entrant {
+.standings .who-cell {
   min-width: 220px;
 }
 
-.lb .entrant img,
-.top5 .entrant img {
+.standings .who-cell img,
+.top5 .who-cell img {
   width: 28px;
   height: 28px;
   border-radius: 50%;
@@ -723,43 +733,43 @@ th {
   object-fit: cover;
 }
 
-.top5 .entrant img {
+.top5 .who-cell img {
   width: 20px;
   height: 20px;
   margin-right: 6px;
 }
 
-.entry-title {
+.entry-name {
   display: block;
-  color: var(--muted);
+  color: var(--sub);
   font-size: 13px;
   margin-top: 2px;
 }
 
-/* ---- Phases timeline ---- */
+/* ---- Timeline ---- */
 
-.phases {
+.timeline {
   margin: 6px 0 4px;
 }
 
-.phases .track {
+.timeline-track {
   position: relative;
   height: 4px;
   border-radius: 2px;
-  background: var(--line);
+  background: var(--edge);
   margin: 0 2px 10px;
 }
 
-.phases .track i {
+.timeline-track i {
   position: absolute;
   left: 0;
   top: 0;
   height: 100%;
-  background: var(--good);
+  background: var(--leaf);
   border-radius: 2px;
 }
 
-.phases .track b {
+.timeline-track b {
   position: absolute;
   top: 50%;
   width: 12px;
@@ -767,33 +777,33 @@ th {
   margin: -6px 0 0 -6px;
   border-radius: 50%;
   background: #fff;
-  border: 3px solid var(--good);
+  border: 3px solid var(--leaf);
 }
 
-.phases .stops {
+.timeline-stops {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
-.phases .stops div {
+.timeline-stops div {
   font-size: 13px;
 }
 
-.phases .stops b {
+.timeline-stops b {
   display: block;
   font-size: 13px;
 }
 
-.phases .stops span {
-  color: var(--muted);
+.timeline-stops span {
+  color: var(--sub);
 }
 
-.phases .stops .cur b {
-  color: var(--good);
+.timeline-stops .cur b {
+  color: var(--leaf);
 }
 
-/* ---- Prose, rules, recent entries, profile header ---- */
+/* ---- Prose, rules, latest entries, profile header ---- */
 
 .prose {
   max-width: 72ch;
@@ -802,7 +812,7 @@ th {
 .prose code {
   padding: 1px 5px;
   border-radius: 5px;
-  background: var(--end-soft);
+  background: var(--stone-tint);
   font-size: 14px;
 }
 
@@ -820,19 +830,17 @@ th {
   margin: 14px 0 6px;
 }
 
-.more,
 .rules {
   margin: 12px 0;
 }
 
-.more summary,
 .rules summary {
   cursor: pointer;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--leaf);
 }
 
-.recent {
+.latest {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -841,89 +849,84 @@ th {
   font-size: 15px;
 }
 
-.recent li {
-  border-bottom: 1px solid var(--line);
+.latest li {
+  border-bottom: 1px solid var(--edge);
   padding-bottom: 6px;
 }
 
-.who {
+.person {
   display: flex;
   gap: 20px;
   align-items: flex-start;
   margin: 20px 0 8px;
 }
 
-.who h1 {
+.person h1 {
   margin: 0;
 }
 
-.avatar {
+.portrait {
   width: 96px;
   height: 96px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid var(--line);
+  border: 1px solid var(--edge);
 }
 
-.handle {
-  color: var(--muted);
+.at-handle {
+  color: var(--sub);
   margin: 2px 0 8px;
 }
 
-.links {
+.out-links {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
   font-size: 14px;
-  color: var(--muted);
+  color: var(--sub);
 }
 
-/* ---- Profile facts ---- */
+/* ---- Profile record ---- */
 
-.facts {
+.record {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 8px 20px;
   margin: 20px 0;
   padding: 16px 18px;
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--paper);
+  border: 1px solid var(--edge);
   border-radius: 12px;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift);
 }
 
-.facts dt {
+.record dt {
   font-weight: 700;
-  color: var(--muted);
+  color: var(--sub);
 }
 
-.facts dd {
+.record dd {
   margin: 0;
-}
-
-.facts .pot {
-  font-size: 20px;
-  color: var(--accent);
 }
 
 /* ---- Small screens ---- */
 
 @media (max-width: 900px) {
-  .split {
+  .duo {
     grid-template-columns: 1fr;
   }
 
-  .detail,
-  .list-col {
+  .peek,
+  .rail {
     max-height: none;
     overflow: visible;
   }
 
-  .stats {
+  .kpis {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .cards {
+  .metrics {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -945,30 +948,30 @@ th {
     padding: 4px 16px 48px;
   }
 
-  .facts {
+  .record {
     grid-template-columns: 1fr;
     gap: 2px;
   }
 
-  .facts dd {
+  .record dd {
     margin-bottom: 8px;
   }
 
-  .who {
+  .person {
     flex-direction: column;
     gap: 12px;
   }
 
-  .row {
+  .bounty-row {
     grid-template-columns: 64px minmax(0, 1fr) 52px;
   }
 
-  .r-fee,
-  .r-time {
+  .cell-fee,
+  .cell-time {
     display: none;
   }
 
-  .pays {
+  .share-bar {
     width: 56px;
   }
 }

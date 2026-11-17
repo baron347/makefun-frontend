@@ -1,75 +1,87 @@
 // A small cached client for the make.fun public API.
 //
-// The deal this client makes with the rest of the app:
+// The promise this client makes to the rest of the app:
 //  - every page fetches once; two callers asking for the same URL while a
-//    fetch is still flying share that one promise, never a second request;
+//    request is still flying share that one promise, never a second one;
 //  - a body stays fresh in memory for a minute, then is revalidated with
 //    its ETag, so a 304 answer costs no body at all;
 //  - a request that hangs is dropped after thirty seconds.
 //
-// fetchStats() returns the real counts the footer prints.
+// tally() returns the real counts the footer prints, so the page can say
+// honestly what it fetched instead of guessing.
 
-const ROOT = "https://make.fun/api";
-const FRESH_MS = 60_000;
-const ABORT_MS = 30_000;
-const CLOSED_CAP = 500;
-const CLOSED_PAGES = 10;
+const API_ROOT = "https://make.fun/api";
+const FRESH_FOR_MS = 60_000;
+const GIVE_UP_MS = 30_000;
+const ENDED_LIMIT = 500;
+const ENDED_PAGES = 10;
 
-// url -> { body, etag, at }
-const kept = new Map();
-// url -> promise still in flight
-const inFlight = new Map();
-
-const counts = { sent: 0, notModified: 0, fromMemory: 0, lastAt: 0 };
-
-export function fetchStats() {
-  return {
-    req: counts.sent,
-    notMod: counts.notModified,
-    mem: counts.fromMemory,
-    at: counts.lastAt,
-  };
-}
-
-export function resetStats() {
-  counts.sent = 0;
-  counts.notModified = 0;
-  counts.fromMemory = 0;
-  counts.lastAt = 0;
-}
-
-export function flushCache() {
-  kept.clear();
-}
-
-function fresh(entry) {
-  return entry && Date.now() - entry.at < FRESH_MS;
-}
-
-async function fetchJson(path) {
-  const known = kept.get(path);
-  if (fresh(known)) {
-    counts.fromMemory++;
-    counts.lastAt = Date.now();
-    return known.body;
+class Client {
+  constructor() {
+    // path -> { body, etag, at } — answers already in hand.
+    this.kept = new Map();
+    // path -> promise — requests still in flight, shared by all callers.
+    this.flying = new Map();
+    this.tally = { sent: 0, notModified: 0, fromMemory: 0, lastAt: 0 };
   }
-  const shared = inFlight.get(path);
-  if (shared) return shared;
 
-  const job = (async () => {
+  stats() {
+    return {
+      req: this.tally.sent,
+      notMod: this.tally.notModified,
+      mem: this.tally.fromMemory,
+      at: this.tally.lastAt,
+    };
+  }
+
+  reset() {
+    this.tally.sent = 0;
+    this.tally.notModified = 0;
+    this.tally.fromMemory = 0;
+    this.tally.lastAt = 0;
+  }
+
+  clear() {
+    this.kept.clear();
+  }
+
+  stillFresh(entry) {
+    return Boolean(entry) && Date.now() - entry.at < FRESH_FOR_MS;
+  }
+
+  async json(path) {
+    const known = this.kept.get(path);
+    if (this.stillFresh(known)) {
+      this.tally.fromMemory++;
+      this.tally.lastAt = Date.now();
+      return known.body;
+    }
+    const shared = this.flying.get(path);
+    if (shared) return shared;
+
+    const job = this.run(path, known);
+    this.flying.set(path, job);
+    try {
+      return await job;
+    } finally {
+      this.flying.delete(path);
+    }
+  }
+
+  async run(path, known) {
     const headers = known?.etag ? { "If-None-Match": known.etag } : {};
-    counts.sent++;
+    this.tally.sent++;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), ABORT_MS);
+    const timer = setTimeout(() => ctrl.abort(), GIVE_UP_MS);
     let res;
     try {
-      res = await fetch(ROOT + path, { headers, signal: ctrl.signal });
+      res = await fetch(API_ROOT + path, { headers, signal: ctrl.signal });
     } finally {
       clearTimeout(timer);
     }
     if (res.status === 304 && known) {
-      counts.notModified++;
-      counts.lastAt = Date.now();
+      this.tally.notModified++;
+      this.tally.lastAt = Date.now();
       known.at = Date.now();
       return known.body;
     }
@@ -79,44 +91,81 @@ async function fetchJson(path) {
       throw err;
     }
     const body = await res.json();
-    counts.lastAt = Date.now();
-    kept.set(path, { body, etag: res.headers.get("ETag"), at: Date.now() });
+    this.tally.lastAt = Date.now();
+    this.kept.set(path, {
+      body,
+      etag: res.headers.get("ETag"),
+      at: Date.now(),
+    });
     return body;
-  })();
-
-  inFlight.set(path, job);
-  try {
-    return await job;
-  } finally {
-    inFlight.delete(path);
   }
-}
 
-// The open board, carrying the activity times the ticker reads.
-export const listOpen = () => fetchJson("/competitions?status=open&activity=times");
+  // The open board, carrying the activity times the ticker reads.
+  board() {
+    return this.json("/competitions?status=open&activity=times");
+  }
 
-// Closed and resolved bounties for the board's Closed tab: up to 500 rows,
-// newest deadline first, walking the cursor pages until one comes back empty.
-export async function listByStatus(status) {
-  const rows = [];
-  let cursor = "";
-  for (let page = 0; page < CLOSED_PAGES && rows.length < CLOSED_CAP; page++) {
-    const tail = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    const chunk = await fetchJson(
-      `/competitions?status=${status}&activity=times${tail}`,
+  // One status worth of finished bounties: up to 500 rows, newest deadline
+  // first, walking the cursor pages until one comes back empty.
+  async byStatus(status) {
+    const rows = [];
+    let cursor = "";
+    for (let page = 0; page < ENDED_PAGES && rows.length < ENDED_LIMIT; page++) {
+      const tail = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      const chunk = await this.json(
+        `/competitions?status=${status}&activity=times${tail}`,
+      );
+      rows.push(...(chunk.items ?? []));
+      cursor = chunk.next_cursor ?? "";
+      if (!cursor) break;
+    }
+    return { items: rows };
+  }
+
+  // Closed + resolved together, newest deadline first. A fetch that comes
+  // back empty is tried once more after a short pause — the closed list
+  // sometimes lags the open one by a beat.
+  async ended() {
+    const gather = async () => {
+      const closed = await this.byStatus("closed").catch(() => ({ items: [] }));
+      const resolved = await this.byStatus("resolved").catch(() => ({
+        items: [],
+      }));
+      return [...closed.items, ...resolved.items].sort(
+        (a, b) => new Date(b.deadline) - new Date(a.deadline),
+      );
+    };
+    let rows = await gather();
+    if (rows.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      rows = await gather();
+    }
+    return rows;
+  }
+
+  bounty(slug) {
+    return this.json(`/competitions/${encodeURIComponent(slug)}`);
+  }
+
+  standings(slug) {
+    return this.json(
+      `/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`,
     );
-    rows.push(...(chunk.items ?? []));
-    cursor = chunk.next_cursor ?? "";
-    if (!cursor) break;
   }
-  return { items: rows };
+
+  profile(handle) {
+    return this.json(`/profiles/${encodeURIComponent(handle)}`);
+  }
 }
 
-export const oneBounty = (slug) =>
-  fetchJson(`/competitions/${encodeURIComponent(slug)}`);
+const client = new Client();
 
-export const oneStandings = (slug) =>
-  fetchJson(`/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`);
-
-export const oneProfile = (handle) =>
-  fetchJson(`/profiles/${encodeURIComponent(handle)}`);
+export const fetchStats = () => client.stats();
+export const resetStats = () => client.reset();
+export const flushCache = () => client.clear();
+export const listOpen = () => client.board();
+export const listByStatus = (status) => client.byStatus(status);
+export const listEnded = () => client.ended();
+export const oneBounty = (slug) => client.bounty(slug);
+export const oneStandings = (slug) => client.standings(slug);
+export const oneProfile = (handle) => client.profile(handle);

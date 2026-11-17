@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Featherlight — a fast, read-only browser for make.fun bounties: the live board, bounty pages, standings and public profiles, fetched straight from the make.fun public API.">
+<meta name="description" content="Featherlight — a small, read-only window onto make.fun bounties: the live board, one bounty at a time, standings and public profiles, all pulled from the make.fun public API.">
 <meta name="theme-color" content="#0b6e36">
 <title>Featherlight · make.fun bounties</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
-<!-- A single ES module boots the app and renders into #app. -->
+<!-- One ES module boots the app and renders into #app. -->
 <script type="module" src="main.js"></script>
 </head>
 <body>
@@ -22,7 +22,7 @@
 <main id="app" aria-live="polite"></main>
 <footer>
   <p id="api-status">This view: nothing fetched yet</p>
-  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are cached in memory and revalidated with ETags · read-only: no sign-in, no tracking, nothing sent anywhere</p>
+  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are kept in memory for a minute and revalidated with ETags · read-only: no sign-in, no tracking, nothing sent anywhere</p>
 </footer>
 <noscript><p class="error">This page needs JavaScript — it fetches the live bounty data from the make.fun public API in your browser.</p></noscript>
 </body>

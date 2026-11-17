@@ -4,42 +4,40 @@
 [![rank](https://make.fun/badge/makefun-frontend-01/baron347/makefun-frontend/rank.svg)](https://make.fun/bounty/makefun-frontend-01)
 [![reward](https://make.fun/badge/makefun-frontend-01/baron347/makefun-frontend/reward.svg)](https://make.fun/bounty/makefun-frontend-01)
 
-A light, read-only browser for [make.fun](https://make.fun), built for the
+A small, read-only browser for [make.fun](https://make.fun), written for the
 [Build the best make.fun frontend](https://make.fun/bounty/makefun-frontend-01)
-bounty. Static files only — hand-written JavaScript, no framework, no build
-step — and every number on screen comes live from the make.fun public API.
+bounty. Static files only: hand-written JavaScript, no framework, no build
+step. Every number on screen comes live from the make.fun public API.
 
-## Running it
+## Try it
 
 ```sh
 node serve.ts        # serves app/ at http://localhost:8080
 ```
 
-Open <http://localhost:8080>. Any static host works as well, with `app/`
-at the root.
+Open <http://localhost:8080>. Any static host works too, with `app/` at the
+root.
 
-## The four views
+## What you get
 
-Every view has its own URL, so each one can be linked or refreshed:
-
-- **Board** (`#/`) — open bounties in a master-detail layout. The left
-  column lists them compactly: live pot, entry fee, time left with a
-  progress bar, entry count. The right pane shows the bounty you picked,
-  in full. Above them sit four live numbers (bounties open, pots right
-  now, entries so far, closing next, ticking down every second) and a
-  ticker naming the newest entries. Open and Closed tabs carry their
-  counts; sort chips (soonest first, largest pot, most entered), kind
-  chips and a search box narrow the list in memory, with no extra fetch.
-  Clicking a row swaps the detail pane. A bounty past its deadline counts
-  as finished even while its status still says open, until results are out.
+- **Board** (`#/`) — open bounties as a master-detail pair: a compact list
+  on the left (live pot, entry fee, time left with a progress bar, entry
+  count) and the bounty you picked in full on the right. Four live numbers
+  sit above them — bounties open, pots right now, entries so far, and the
+  next deadline, ticking down every second — plus a ticker naming the
+  newest entries. Open and Closed tabs carry their counts; sort pills
+  (soonest first, largest pot, most entered), kind pills and a search box
+  narrow the list in memory, with no extra fetch. Clicking a row swaps the
+  detail pane. A bounty past its deadline counts as finished even while its
+  status still says open, until results are out.
 - **Bounty** (`#/bounty/<slug>`) — one bounty in full: what it is, the
   whole rules, stat cards (pot now, what it costs to enter, closes in,
   entries), a green button that takes you to enter on make.fun, a rewards
   table showing what every place pays from the live pot right now with
-  green bars sized to the top prize, a timeline (Opened → Now →
-  Deadline → Results by), a top-5 preview by judge win rate with prize
-  now, and the latest entries. The board's detail pane shows the same for
-  the bounty you picked.
+  green bars sized to the top prize, a timeline (Opened → Now → Deadline →
+  Results by), a top-5 preview by judge win rate with prize now, and the
+  latest entries. The board's detail pane shows the same for the bounty
+  you picked.
 - **Standings** (`#/bounty/<slug>/leaderboard`) — the bounty's ranked
   entries: judge win rate, 90% range, prize now (what each place pays out
   of the live pot), entry size and status, with medals for the top three.
@@ -49,6 +47,8 @@ Every view has its own URL, so each one can be linked or refreshed:
   links, when they joined, their record (bounties entered, placed, won,
   podiums, best finish, winnings) and every entry they have made, each
   linked back to its bounty.
+
+Every view has its own URL, so each one can be linked or refreshed.
 
 ## Why it feels fast
 
@@ -71,7 +71,7 @@ Every view has its own URL, so each one can be linked or refreshed:
   the page you are on (API requests, 304 revalidations, answers served
   from memory, time since the last answer).
 
-## What lives here
+## Files
 
 - `app/` — the frontend: `index.html`, `style.css`, `main.js` (the
   router), `api.js` (the cached API client), `views.js` (the four views),

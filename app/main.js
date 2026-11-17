@@ -1,76 +1,89 @@
 // The router and the board's memory: four routes (board, bounty,
 // standings, profile), one fetch per page, countdowns that tick without
 // rebuilding the page, and a footer that says what the page really fetched.
+//
+// Views live in views.js, the API client in api.js, formatting in
+// format.js. This file only wires them together: it reads the hash, loads
+// the data, renders, and handles the clicks that stay on the same page.
 
 import {
   fetchStats,
   flushCache,
   listOpen,
-  listByStatus,
+  listEnded,
   oneBounty,
   oneStandings,
   oneProfile,
   resetStats,
 } from "./api.js";
 import { boardPage, bountyPage, standingsPage, profilePage } from "./views.js";
-import { left, leftExact, since } from "./format.js";
+import { leftShort, leftTick, ago } from "./format.js";
 
 const root = document.getElementById("app");
 const footerLine = document.getElementById("api-status");
 
 // What the board remembers while you use it: the search text, the tab, the
-// sort and kind chips, which bounty is picked, and the detail data already
-// fetched for it.
-const board = {
-  q: "",
-  tab: "live",
-  sort: "closing",
-  cat: "All",
-  ended: null,
-  endedBusy: false,
-  selected: null,
-  top5: {},
-  full: {},
-};
+// sort and kind pills, which bounty is picked, and the detail data already
+// fetched for it. A factory, so a fresh board starts from the same shape.
+function freshBoardState() {
+  return {
+    q: "",
+    tab: "live",
+    sort: "closing",
+    cat: "All",
+    ended: null,
+    endedBusy: false,
+    selected: null,
+    top5: {},
+    full: {},
+  };
+}
 
+const board = freshBoardState();
 let boardData = null;
 let rowsShown = 25;
-let tickFast = null;
-let tickSlow = null;
 
-function startClocks() {
-  stopClocks();
-  tickFast = setInterval(() => {
-    for (const el of document.querySelectorAll("[data-countdown]")) {
-      el.textContent = leftExact(el.dataset.countdown);
-    }
-    paintFooter();
-  }, 1000);
-  tickSlow = setInterval(() => {
-    for (const el of root.querySelectorAll("[data-deadline]")) {
-      el.textContent = left(el.dataset.deadline);
-    }
-    for (const el of document.querySelectorAll("[data-createdat]")) {
-      el.textContent = since(el.dataset.createdat);
-    }
-  }, 30000);
-}
+// --- Clocks ---------------------------------------------------------------
+// Two timers: one per second for the ticking countdowns, one per thirty
+// seconds for the coarse "time left" and "x min ago" labels. Both only
+// rewrite text nodes, never the page, so scrolling and focus survive.
 
-function stopClocks() {
-  if (tickFast) clearInterval(tickFast);
-  if (tickSlow) clearInterval(tickSlow);
-  tickFast = tickSlow = null;
-}
+const clocks = {
+  fast: null,
+  slow: null,
+  start() {
+    this.stop();
+    this.fast = setInterval(() => {
+      for (const el of document.querySelectorAll("[data-countdown]")) {
+        el.textContent = leftTick(el.dataset.countdown);
+      }
+      paintFooter();
+    }, 1000);
+    this.slow = setInterval(() => {
+      for (const el of root.querySelectorAll("[data-deadline]")) {
+        el.textContent = leftShort(el.dataset.deadline);
+      }
+      for (const el of document.querySelectorAll("[data-createdat]")) {
+        el.textContent = ago(el.dataset.createdat);
+      }
+    }, 30000);
+  },
+  stop() {
+    if (this.fast) clearInterval(this.fast);
+    if (this.slow) clearInterval(this.slow);
+    this.fast = this.slow = null;
+  },
+};
 
 // The footer line: the real request counts for the page you are on.
 function paintFooter() {
   if (!footerLine) return;
   const s = fetchStats();
-  const ago = s.at
+  const agoSecs = s.at
     ? `${Math.max(0, Math.round((Date.now() - s.at) / 1000))}s ago`
     : "—";
   const plural = s.req === 1 ? "" : "s";
-  footerLine.textContent = `This view: ${s.req} API request${plural} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${ago}`;
+  footerLine.textContent = `This view: ${s.req} API request${plural} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${agoSecs}`;
 }
 
 function showLoading(title) {
@@ -109,6 +122,19 @@ async function loadDetail(slug) {
   }
 }
 
+// The Closed tab's extra rows, fetched once and kept for the session.
+async function loadEnded() {
+  if (board.ended || board.endedBusy) return;
+  board.endedBusy = true;
+  try {
+    board.ended = await listEnded();
+  } catch {
+    // The Closed tab simply keeps what the open list already had.
+  } finally {
+    board.endedBusy = false;
+  }
+}
+
 async function showBoard() {
   showLoading("Open bounties");
   try {
@@ -125,7 +151,7 @@ async function showBoard() {
     await loadEnded();
     root.innerHTML = boardPage(boardData, board);
     attachSearch();
-    startClocks();
+    clocks.start();
     paintFooter();
   } catch (err) {
     return void showError(err, "board");
@@ -133,35 +159,7 @@ async function showBoard() {
   window.__shotReady = true;
 }
 
-// The Closed tab's extra pages: closed + resolved, newest deadline first.
-// A failed fetch is tried once more after a short pause, then left empty.
-async function loadEnded() {
-  if (board.ended || board.endedBusy) return;
-  board.endedBusy = true;
-  try {
-    const fetchEnded = async () => {
-      const closed = await listByStatus("closed").catch(() => ({ items: [] }));
-      const resolved = await listByStatus("resolved").catch(() => ({
-        items: [],
-      }));
-      return [...closed.items, ...resolved.items].sort(
-        (a, b) => new Date(b.deadline) - new Date(a.deadline),
-      );
-    };
-    let rows = await fetchEnded();
-    if (rows.length === 0) {
-      await new Promise((r) => setTimeout(r, 2000));
-      rows = await fetchEnded();
-    }
-    board.ended = rows;
-  } catch {
-    // The Closed tab simply keeps what the open list already had.
-  } finally {
-    board.endedBusy = false;
-  }
-}
-
-// Re-render the board in place (search, tabs, chips, picking a row) without
+// Re-render the board in place (search, tabs, pills, picking a row) without
 // refetching, keeping the scroll position.
 function repaintBoard() {
   const y = window.scrollY;
@@ -191,7 +189,7 @@ async function showBounty(slug) {
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
     document.title = `${comp.title} · Featherlight`;
     root.innerHTML = bountyPage(comp, (lb.entries ?? []).slice(0, 5));
-    startClocks();
+    clocks.start();
     paintFooter();
   } catch (err) {
     return void showError(err, `bounty:${slug}`);
@@ -258,7 +256,7 @@ function readRoute() {
 
 async function route() {
   window.__shotReady = false;
-  stopClocks();
+  clocks.stop();
   const r = readRoute();
   if (r.name === "bounty") await showBounty(r.slug);
   else if (r.name === "leaderboard") await showStandings(r.slug);
@@ -268,20 +266,27 @@ async function route() {
   window.scrollTo(0, 0);
 }
 
-root.addEventListener("click", async (ev) => {
-  const btn = ev.target.closest("[data-action]");
-  if (!btn) return;
-  const action = btn.dataset.action;
-  if (action === "retry") {
+// --- Clicks that stay on the page -----------------------------------------
+// One handler per data-action, looked up by name instead of a long if/else
+// chain, so adding a new in-page action is one entry here.
+
+function clearBoardCaches() {
+  flushCache();
+  board.ended = null;
+  board.top5 = {};
+  board.full = {};
+}
+
+const actions = {
+  async retry() {
     flushCache();
     await route();
-  } else if (action === "refresh") {
-    flushCache();
-    board.ended = null;
-    board.top5 = {};
-    board.full = {};
+  },
+  async refresh() {
+    clearBoardCaches();
     await route();
-  } else if (action === "tab") {
+  },
+  tab(btn) {
     board.tab = btn.dataset.tab;
     if (board.tab === "ended" && !board.ended) {
       loadEnded().then(() => {
@@ -290,13 +295,16 @@ root.addEventListener("click", async (ev) => {
       });
     }
     repaintBoard();
-  } else if (action === "sort") {
+  },
+  sort(btn) {
     board.sort = btn.dataset.sort;
     repaintBoard();
-  } else if (action === "cat") {
+  },
+  cat(btn) {
     board.cat = btn.dataset.cat;
     repaintBoard();
-  } else if (action === "select") {
+  },
+  async select(btn, ev) {
     if (ev.target.closest("a[href]")) return; // the title link navigates instead
     const slug = btn.dataset.slug;
     if (slug === board.selected) return;
@@ -304,7 +312,8 @@ root.addEventListener("click", async (ev) => {
     repaintBoard();
     await loadDetail(slug);
     if (readRoute().name === "board" && board.selected === slug) repaintBoard();
-  } else if (action === "more-lb") {
+  },
+  async "more-lb"() {
     rowsShown += 25;
     const slug = root.dataset.lbSlug;
     try {
@@ -313,14 +322,21 @@ root.addEventListener("click", async (ev) => {
     } catch {
       await route();
     }
-  }
+  },
+};
+
+root.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("[data-action]");
+  if (!btn) return;
+  const handler = actions[btn.dataset.action];
+  if (handler) await handler(btn, ev);
 });
 
 // Rows are keyboard-selectable too.
 root.addEventListener("keydown", (ev) => {
   if (
     (ev.key === "Enter" || ev.key === " ") &&
-    ev.target.matches?.('.row[data-action="select"]')
+    ev.target.matches?.('.bounty-row[data-action="select"]')
   ) {
     ev.preventDefault();
     ev.target.click();

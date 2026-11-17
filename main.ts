@@ -28,7 +28,10 @@ import { fileURLToPath } from "node:url";
 import { buildDossier } from "./vendor/makefun-frontend.ts";
 
 const repoRoot = fileURLToPath(new URL(".", import.meta.url));
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+
+function resolveOutputDir() {
+  return process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+}
 
 // Caps from the scorer's own reference/gate.json. Only text_max_bytes
 // changes the byte counts; the rest reject an entry the scorer would reject
@@ -36,23 +39,29 @@ const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 // directories in app/, or 16 MiB of app files in total. app/ is counted
 // beside the output directory's own 1000-entry cap, its screenshots/ and
 // dossier.json.
-const caps = {
-  text_max_bytes: 163840,
-  screenshots: { max: 3, max_bytes: 262144 },
-  app_max_files: 993,
-  app_max_bytes: 16777216,
-};
+function scorerCaps() {
+  return {
+    text_max_bytes: 163840,
+    screenshots: { max: 3, max_bytes: 262144 },
+    app_max_files: 993,
+    app_max_bytes: 16777216,
+  };
+}
+
+function copyTree(from, to) {
+  mkdirSync(to, { recursive: true });
+  cpSync(from, to, { recursive: true });
+}
 
 function packEntry() {
+  const outputDir = resolveOutputDir();
   mkdirSync(outputDir, { recursive: true });
-  cpSync(join(repoRoot, "app"), join(outputDir, "app"), { recursive: true });
-  const outShots = join(outputDir, "screenshots");
-  mkdirSync(outShots, { recursive: true });
+  copyTree(join(repoRoot, "app"), join(outputDir, "app"));
   const inShots = join(repoRoot, "screenshots");
   if (existsSync(inShots)) {
-    cpSync(inShots, outShots, { recursive: true });
+    copyTree(inShots, join(outputDir, "screenshots"));
   }
-  const dossier = buildDossier(outputDir, caps);
+  const dossier = buildDossier(outputDir, scorerCaps());
   writeFileSync(join(outputDir, "dossier.json"), dossier);
 }
 
