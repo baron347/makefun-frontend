@@ -22,19 +22,28 @@ with `app/` at its root.
 
 Four surfaces, each reachable by a link and by its own URL:
 
-- **Bounty board** (`#/`) — the live bounties. Every card shows its live pot
-  (base reward plus entry fees paid in), its entry fee where one is set, its
-  time left, and its entry count. Search filters the board without refetching;
-  "Show ended" loads the ended bounties. Bounties still taking entries come
-  first, closing soonest on top.
+- **Bounty board** (`#/`) — the live bounties as a master-detail board: dense
+  rows (live pot, fee, time left with a progress bar, entries) on the left,
+  the selected bounty's detail on the right. A stats strip shows live
+  bounties, live pots, total entries and the next deadline ticking down; a
+  live ticker names the newest entries. Live/Ended tabs carry counts, and
+  sort chips (Closing soon / Biggest pot / Most entries), category chips and
+  search filter the board without refetching. Clicking a row updates the
+  detail pane; the title link opens the bounty's own page. Bounties still
+  taking entries come first, closing soonest on top. A bounty past its
+  deadline counts as ended even while its status still reads open, until its
+  results are published.
 - **Bounty page** (`#/bounty/<slug>`) — summary, description and full rules,
-  a rewards table with what each place pays right now, the live pot, entry
-  fee, deadline, published date, entry count, status and sponsor, plus a link
-  to the leaderboard. A bounty past its deadline counts as ended even while
-  its status still reads open, until its results are published.
+  stat cards (live pot, entry fee, time left, entries), a green "Enter on
+  make.fun" button, a rewards table with what each place pays right now and
+  green bars sized to the top prize, a phases timeline (Opened → Now →
+  Deadline → Results by), a Top 5 leaderboard preview with judge win rates
+  and prize now, and the most recent entries. The board's detail pane shows
+  the same rich detail for the selected bounty.
 - **Leaderboard** (`#/bounty/<slug>/leaderboard`) — the bounty's ranked
-  entries: judge win rate, 90% interval, entry size and status, paged 25 at a
-  time from a single fetch. Clicking a handle opens that entrant's profile.
+  entries: judge win rate, 90% interval, prize now (what each rank pays from
+  the live pot), entry size and status, paged 25 at a time from a single
+  fetch. Clicking a handle opens that entrant's profile.
 - **Profile** (`#/profile/<handle>`) — a public profile: avatar, bio, links,
   joined date, record (entered, placed, won, podiums, best placement, prize
   money) and every entry they have made, each linked back to its bounty.
@@ -48,10 +57,18 @@ Four surfaces, each reachable by a link and by its own URL:
   then revalidated with `If-None-Match`, so a repeat visit inside the minute
   costs no request at all and a 304 after it costs no body.
 - **Small first load.** Six small files on first load (HTML, one stylesheet,
-  four small ES modules), no framework, no third-party code.
+  four small ES modules), no framework, no third-party code. The JS and CSS
+  ship minified (terser / clean-css) for first-load size; the unminified
+  sources are not kept in the repo. Per the dossier: first load 6 files,
+  38,015 bytes raw, 12,144 bytes gzip-9; whole app 8 files, 42,549 bytes.
 - **No blank pages.** Every route shows a loading state, then its data, or a
   clear error with a retry button when the API does not answer. The "time
-  left" figures tick every 30 seconds without rebuilding the page.
+  left" figures tick every second (countdowns) and every 30 seconds (rows)
+  without rebuilding the page. API requests time out after 30 seconds instead
+  of hanging, and a failed ended-bounties fetch is retried once.
+- **Honest status line.** The footer shows the real request counts for the
+  current view (API requests, 304 revalidations, answers served from memory,
+  time since the last answer).
 
 ## Files
 
