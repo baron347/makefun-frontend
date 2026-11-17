@@ -1,5 +1,4 @@
-// Router + board state: four routes, one fetch per page, ticking
-// countdowns, a footer that says what the page really fetched.
+// Router + board state: four routes, one fetch per page, ticking countdowns.
 import {
   fetchStats,
   flushCache,
@@ -16,9 +15,8 @@ import { leftShort, leftTick, ago } from "./format.js";
 const root = document.getElementById("app");
 const footerLine = document.getElementById("api-status");
 
-// Bookmarks kept in this browser only: a list of slugs in localStorage.
-// The Set is the live copy; storage is read once at boot and written on
-// every change, never on every render.
+// Bookmarks in this browser only: slugs in localStorage, read once at
+// boot, written on every change, never on every render.
 const SAVED_KEY = "featherlight:saved-v1";
 
 function loadSaved() {
@@ -62,8 +60,7 @@ function clearSaved() {
   storeSaved([]);
 }
 
-// A polite live region that tells screen-reader users what a star just
-// did; built once, on first use.
+// A live region telling screen-reader users what a star just did.
 let saveStatus = null;
 function announceSave(message) {
   if (!saveStatus) {
@@ -75,7 +72,7 @@ function announceSave(message) {
   saveStatus.textContent = message;
 }
 
-// A star flipped in another tab updates this one too, without a reload.
+// A star flipped in another tab updates this one too, no reload.
 window.addEventListener("storage", (ev) => {
   if (ev.key !== SAVED_KEY) return;
   savedSlugs.clear();
@@ -103,8 +100,7 @@ const board = freshBoardState();
 let boardData = null;
 let rowsShown = 25;
 
-// Two timers (1s countdowns, 30s coarse labels) that only rewrite text
-// nodes, never the page, so scroll and focus survive.
+// Two timers (1s countdowns, 30s labels) rewriting text nodes only.
 const clocks = {
   fast: null,
   slow: null,
@@ -135,11 +131,13 @@ const clocks = {
 function paintFooter() {
   if (!footerLine) return;
   const s = fetchStats();
-  const agoSecs = s.at
-    ? `${Math.max(0, Math.round((Date.now() - s.at) / 1000))}s ago`
-    : "—";
+  const span = s.at ? Date.now() - s.at : null;
+  const agoSecs =
+    span === null ? "—" : `${Math.max(0, Math.round(span / 1000))}s ago`;
   const plural = s.req === 1 ? "" : "s";
-  footerLine.textContent = `This view: ${s.req} API request${plural} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${agoSecs}`;
+  const unchanged = `${s.notMod} unchanged (304)`;
+  const fromMemory = `${s.mem} from memory`;
+  footerLine.textContent = `This view: ${s.req} API request${plural} · ${unchanged} · ${fromMemory} · updated ${agoSecs}`;
 }
 
 function showLoading(title) {
@@ -148,16 +146,20 @@ function showLoading(title) {
 
 function showError(err, retryKey) {
   const missing = err?.status === 404;
+  const heading = missing ? "Not found" : "Could not load this page";
+  const message = missing
+    ? "make.fun has no page with that address."
+    : "The make.fun API did not answer. Your connection may be down, or the API may be busy — try again.";
   root.innerHTML = `
-    <h1>${missing ? "Not found" : "Could not load this page"}</h1>
-    <p class="error">${missing ? "make.fun has no page with that address." : "The make.fun API did not answer. Your connection may be down, or the API may be busy — try again."}</p>
+    <h1>${heading}</h1>
+    <p class="error">${message}</p>
     <p><button type="button" data-action="retry">Try again</button> <a href="#/">← Back to the board</a></p>`;
   root.dataset.retry = retryKey;
   window.__shotReady = true;
 }
 
-// Fetch the picked bounty's full record and top 5, once each. A failure
-// here is not fatal: the pane falls back to the list row's own data.
+// Fetch the picked bounty's record and top 5 once each; on failure the
+// pane falls back to the list row's own data.
 async function loadDetail(slug) {
   if (!slug) return;
   if (!board.full[slug]) {
@@ -170,7 +172,8 @@ async function loadDetail(slug) {
   if (!board.top5[slug]) {
     try {
       const lb = await oneStandings(slug);
-      board.top5[slug] = (lb.entries ?? []).slice(0, 5);
+      const top = (lb.entries ?? []).slice(0, 5);
+      board.top5[slug] = top;
     } catch {
       board.top5[slug] = [];
     }
@@ -196,9 +199,9 @@ async function showBoard() {
     boardData = await listOpen();
     if (!board.selected) {
       const items = boardData.items ?? [];
-      board.selected = items.some((c) => c.slug === "makefun-frontend-01")
-        ? "makefun-frontend-01"
-        : items[0]?.slug ?? null;
+      const ours = items.some((c) => c.slug === "makefun-frontend-01");
+      const first = items[0]?.slug ?? null;
+      board.selected = ours ? "makefun-frontend-01" : first;
     }
     document.title = "Open bounties · Featherlight";
     await loadDetail(board.selected);
@@ -213,7 +216,7 @@ async function showBoard() {
   window.__shotReady = true;
 }
 
-// Re-render the board in place without refetching, keeping scroll.
+// Re-render the board in place, keeping scroll.
 function repaintBoard() {
   const y = window.scrollY;
   root.innerHTML = boardPage(boardData, board);
@@ -280,7 +283,7 @@ async function showProfile(handle) {
   window.__shotReady = true;
 }
 
-// Drop images that fail to load (a missing avatar should vanish).
+// Drop images that fail to load.
 function dropBrokenImages() {
   for (const img of root.querySelectorAll("img")) {
     if (img.complete && img.naturalWidth === 0) {
@@ -292,10 +295,10 @@ function dropBrokenImages() {
 }
 
 function readRoute() {
-  const parts = (location.hash || "#/")
-    .replace(/^#\//, "")
-    .split("/")
-    .map(decodeURIComponent);
+  const hash = location.hash || "#/";
+  const path = hash.replace(/^#\//, "");
+  const bits = path.split("/");
+  const parts = bits.map(decodeURIComponent);
   if (parts[0] === "bounty" && parts[1] && parts[2] === "leaderboard") {
     return { name: "leaderboard", slug: parts[1] };
   }
@@ -316,9 +319,7 @@ async function route() {
   window.scrollTo(0, 0);
 }
 
-// --- Clicks that stay on the page -----------------------------------------
-// One handler per data-action, looked up by name instead of a long if/else
-// chain, so adding a new in-page action is one entry here.
+// Clicks that stay on the page: one handler per data-action, by name.
 function clearBoardCaches() {
   flushCache();
   board.ended = null;
@@ -357,8 +358,8 @@ const actions = {
     board.cat = btn.dataset.cat;
     repaintBoard();
   },
-  // Flip a bounty's star and re-render the page it sits on: on the board
-  // scroll survives; on a bounty page it reloads from the cached API.
+  // Flip a bounty's star and re-render: board keeps scroll, a bounty
+  // page reloads from the cached API.
   async "toggle-save"(btn) {
     const slug = btn.dataset.slug;
     if (!slug) return;
@@ -367,9 +368,8 @@ const actions = {
     if (readRoute().name === "board") repaintBoard();
     else await route();
   },
-  // Wipe every saved bounty. The first tap only arms the button — it must
-  // be tapped again within a few seconds to really clear, so a stray click
-  // cannot silently throw the whole list away.
+  // Wipe every saved bounty: the first tap only arms the button, a second
+  // tap within a few seconds really clears, so a stray click is harmless.
   "clear-saved"(btn) {
     if (!btn.dataset.armed) {
       btn.dataset.armed = "1";
@@ -423,18 +423,16 @@ root.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     ev.target.click();
   }
-  // "S" on a focused row stars it, without touching the mouse: the same
-  // toggle the star button runs, on the row the keyboard is already on.
+  // "S" on a focused row stars it: the same toggle the star button runs.
   if (
     (ev.key === "s" || ev.key === "S") &&
     ev.target.matches?.('.bounty-row[data-action="select"]')
   ) {
     ev.preventDefault();
-    const nowSaved = toggleSaved(ev.target.dataset.slug);
+    const slug = ev.target.dataset.slug;
+    const nowSaved = toggleSaved(slug);
     announceSave(
-      nowSaved
-        ? `Saved ${ev.target.dataset.slug}`
-        : `Removed ${ev.target.dataset.slug} from saved`,
+      nowSaved ? `Saved ${slug}` : `Removed ${slug} from saved`,
     );
     repaintBoard();
     const again = document.querySelector(

@@ -1,5 +1,4 @@
-// Formatting toolbox: safe HTML, money, dates, countdowns, ordinals,
-// Markdown. Pure functions — no network, no DOM.
+// Formatting toolbox: safe HTML, money, dates, countdowns, ordinals, Markdown.
 const MS_MINUTE = 60_000;
 const MS_HOUR = 3_600_000;
 const MS_DAY = 86_400_000;
@@ -48,8 +47,10 @@ export function bytes(value) {
   const n = asNumber(value);
   if (n === null) return "—";
   if (n < 1024) return `${Math.trunc(n)} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  const kb = Math.round(n / 1024);
+  if (n < 1024 * 1024) return `${kb} KB`;
+  const mb = (n / (1024 * 1024)).toFixed(1);
+  return `${mb} MB`;
 }
 
 export function dateDay(value) {
@@ -91,8 +92,9 @@ function splitSpan(ms) {
 export function leftShort(value) {
   const d = asDate(value);
   if (!d) return "ended";
-  const span = splitSpan(d.getTime() - Date.now());
-  if (d.getTime() - Date.now() <= 0) return "ended";
+  const left = d.getTime() - Date.now();
+  if (left <= 0) return "ended";
+  const span = splitSpan(left);
   if (span.days > 0) return `${span.days}d ${span.hours}h left`;
   if (span.hours > 0) return `${span.hours}h ${span.minutes}m left`;
   return `${span.minutes}m left`;
@@ -101,8 +103,9 @@ export function leftShort(value) {
 export function leftTick(value) {
   const d = asDate(value);
   if (!d) return "ended";
-  if (d.getTime() - Date.now() <= 0) return "ended";
-  const span = splitSpan(d.getTime() - Date.now());
+  const left = d.getTime() - Date.now();
+  if (left <= 0) return "ended";
+  const span = splitSpan(left);
   if (span.days > 0) return `${span.days}d ${span.hours}h ${span.minutes}m`;
   if (span.hours > 0) return `${span.hours}h ${span.minutes}m ${span.seconds}s`;
   return `${span.minutes}m ${span.seconds}s`;
@@ -117,8 +120,12 @@ export function ago(value) {
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) {
+    const rest = minutes % 60;
+    return `${hours}h ${rest}m ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 export function ordinalOf(value) {
@@ -126,7 +133,8 @@ export function ordinalOf(value) {
   if (n === null) return "—";
   const whole = Math.trunc(n);
   const lastTwo = whole % 100;
-  if (lastTwo >= 11 && lastTwo <= 13) return `${whole}th`;
+  const isTeen = lastTwo >= 11 && lastTwo <= 13;
+  if (isTeen) return `${whole}th`;
   const last = whole % 10;
   if (last === 1) return `${whole}st`;
   if (last === 2) return `${whole}nd`;
@@ -150,16 +158,20 @@ export function plural(count, one, many) {
   return Number(count) === 1 ? one : many;
 }
 
-// A compact count for tight spots: "1.2k", "3.4M", else the plain integer.
+// A compact count: "1.2k", "3.4M", else the plain integer.
 export function shortCount(value) {
   const n = asNumber(value);
   if (n === null) return "—";
   const abs = Math.abs(n);
   if (abs >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    const scaled = (n / 1_000_000).toFixed(1);
+    const trim = scaled.replace(/\.0$/, "");
+    return `${trim}M`;
   }
   if (abs >= 1_000) {
-    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+    const scaled = (n / 1_000).toFixed(1);
+    const trim = scaled.replace(/\.0$/, "");
+    return `${trim}k`;
   }
   return intFmt.format(Math.trunc(n));
 }
@@ -169,7 +181,7 @@ export function countLabel(count, one, many) {
   return `${int(count)} ${plural(count, one, many)}`;
 }
 
-// --- Small safe Markdown renderer (bold/code/links on escaped text) ---
+// Small safe Markdown renderer: bold, code, links on escaped text.
 
 function renderInline(text) {
   return esc(text)
@@ -194,18 +206,22 @@ export function renderMd(src) {
     const line = rawLine.trim();
     if (line.startsWith("### ")) {
       closeList();
-      out.push(`<h4>${renderInline(line.slice(4))}</h4>`);
+      const body = renderInline(line.slice(4));
+      out.push(`<h4>${body}</h4>`);
     } else if (line.startsWith("## ")) {
       closeList();
-      out.push(`<h3>${renderInline(line.slice(3))}</h3>`);
+      const body = renderInline(line.slice(3));
+      out.push(`<h3>${body}</h3>`);
     } else if (line.startsWith("- ")) {
       if (!list) list = [];
-      list.push(`<li>${renderInline(line.slice(2))}</li>`);
+      const item = renderInline(line.slice(2));
+      list.push(`<li>${item}</li>`);
     } else if (line === "") {
       closeList();
     } else {
       closeList();
-      out.push(`<p>${renderInline(line)}</p>`);
+      const body = renderInline(line);
+      out.push(`<p>${body}</p>`);
     }
   }
   closeList();

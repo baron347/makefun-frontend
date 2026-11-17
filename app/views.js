@@ -1,5 +1,4 @@
-// The four views as HTML strings: board, bounty, standings, profile.
-// Pure string building — main.js owns fetching, state and events.
+// The four views as HTML strings; main.js owns fetching, state and events.
 import {
   esc,
   int,
@@ -85,10 +84,7 @@ function pillBtn(action, key, value, current, label) {
   return `<button type="button" data-action="${action}" data-${key}="${esc(value)}"${on}>${label}</button>`;
 }
 
-// The star that saves a bounty: filled once it is kept. Its own action,
-// so the click never also selects the row it sits in. In a list row the
-// star stands alone (no word fits the narrow cell); elsewhere it keeps
-// its "Save" / "Saved" label.
+// The star that saves a bounty: filled once kept; its own action, so the click never selects the row.
 function saveBtn(slug, saved, withLabel = true) {
   const star = saved ? "★" : "☆";
   const label = saved ? "Saved" : "Save";
@@ -103,24 +99,32 @@ function savedTabLabel(saved) {
 }
 
 
-// One row of the bounty list. `saved` marks the row's star as filled.
+// One row of the bounty list; `saved` fills the row's star.
 function bountyRow(comp, selected, saved) {
   const closingSoon =
     isLive(comp) &&
     new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
   const soon = closingSoon ? '<span class="flag soon">Ending soon</span>' : "";
   const frac = Math.round(100 * progressOf(comp));
+  const cls = `bounty-row${selected ? " on" : ""}${saved ? " saved" : ""}`;
+  const title = `<a href="#/bounty/${encodeURIComponent(comp.slug)}">${esc(comp.title)}</a>`;
+  const desc = esc(comp.summary ?? comp.description ?? "");
+  const tag = `<span class="tag">${esc(comp.category ?? "")}</span>`;
+  const deadline = `<span data-deadline="${esc(comp.deadline)}">${leftShort(comp.deadline)}</span>`;
+  const meter = `<i class="meter${closingSoon ? " hot" : ""}"><b style="width:${frac}%"></b></i>`;
+  const word = plural(comp.submissionCount, "entry", "entries");
+  const star = saveBtn(comp.slug, saved, false);
   return `
-    <li class="bounty-row${selected ? " on" : ""}${saved ? " saved" : ""}" data-action="select" data-slug="${esc(comp.slug)}" tabindex="0">
+    <li class="${cls}" data-action="select" data-slug="${esc(comp.slug)}" tabindex="0">
       <span class="cell-pot">${potOf(comp)}<small>pot</small></span>
       <span class="cell-main">
-        <span class="cell-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${esc(comp.title)}</a></span>
-        <span class="cell-sub">${soon}<span class="tag">${esc(comp.category ?? "")}</span>${esc(comp.summary ?? comp.description ?? "")}</span>
+        <span class="cell-title">${title}</span>
+        <span class="cell-sub">${soon}${tag}${desc}</span>
       </span>
       <span class="cell-fee">${feeText(comp)}</span>
-      <span class="cell-time"><span data-deadline="${esc(comp.deadline)}">${leftShort(comp.deadline)}</span><i class="meter${closingSoon ? " hot" : ""}"><b style="width:${frac}%"></b></i></span>
-      <span class="cell-count"><strong>${int(comp.submissionCount)}</strong><small>${plural(comp.submissionCount, "entry", "entries")}</small></span>
-      <span class="cell-save">${saveBtn(comp.slug, saved, false)}</span>
+      <span class="cell-time">${deadline}${meter}</span>
+      <span class="cell-count"><strong>${int(comp.submissionCount)}</strong><small>${word}</small></span>
+      <span class="cell-save">${star}</span>
     </li>`;
 }
 
@@ -135,8 +139,7 @@ function orderRows(list, key) {
   return copy.sort(byClosing);
 }
 
-// The five-number strip above the board; the fifth card counts starred
-// bounties, so the Saved tab's size is visible at a glance.
+// The five-number strip above the board; the fifth card counts starred bounties.
 function kpis(live, savedCount) {
   const pots = live.reduce(
     (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
@@ -150,13 +153,32 @@ function kpis(live, savedCount) {
     next && new Date(next.deadline).getTime() - Date.now() < 60 * 60 * 1000;
   const nextAttr = next ? ` data-countdown="${esc(next.deadline)}"` : "";
   const nextClass = withinHour ? ' class="red"' : "";
+  const label = next ? leftTick(next.deadline) : "—";
+  const title = next ? esc(next.title) : "";
   return `
     <div class="kpis" role="status">
-      ${statCard("Bounties open", int(live.length), "right now")}
-      ${statCard("Pots right now", money(pots), "live prize money", "green")}
-      ${statCard("Entries so far", shortCount(entries), "across open bounties")}
-      ${statCard("Saved", int(savedCount), "in this browser")}
-      <div><span>Closing next</span><strong${nextClass}${nextAttr}>${next ? leftTick(next.deadline) : "—"}</strong><small>${next ? esc(next.title) : ""}</small></div>
+      ${statCard(
+        "Bounties open",
+        int(live.length),
+        "right now",
+      )}
+      ${statCard(
+        "Pots right now",
+        money(pots),
+        "live prize money",
+        "green",
+      )}
+      ${statCard(
+        "Entries so far",
+        shortCount(entries),
+        "across open bounties",
+      )}
+      ${statCard(
+        "Saved",
+        int(savedCount),
+        "in this browser",
+      )}
+      <div><span>Closing next</span><strong${nextClass}${nextAttr}>${label}</strong><small>${title}</small></div>
     </div>`;
 }
 
@@ -167,9 +189,9 @@ function feed(live, detail) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 4);
   for (const sub of recent) {
-    parts.push(
-      `<a href="#/profile/${encodeURIComponent(sub.hunter)}">@${esc(sub.hunter)}</a> joined ${esc(detail.title)} <span data-createdat="${esc(sub.createdAt)}">${ago(sub.createdAt)}</span>`,
-    );
+    const who = `<a href="#/profile/${encodeURIComponent(sub.hunter)}">@${esc(sub.hunter)}</a>`;
+    const when = `<span data-createdat="${esc(sub.createdAt)}">${ago(sub.createdAt)}</span>`;
+    parts.push(`${who} joined ${esc(detail.title)} ${when}`);
   }
   if (recent.length === 0) {
     let newest = null;
@@ -180,9 +202,9 @@ function feed(live, detail) {
       }
     }
     if (newest) {
-      parts.push(
-        `latest entry ${ago(new Date(newest.at).toISOString())} on ${esc(newest.title)}`,
-      );
+      const when = ago(new Date(newest.at).toISOString());
+      const title = esc(newest.title);
+      parts.push(`latest entry ${when} on ${title}`);
     }
   }
   return `<p class="feed">${parts.join(" · ")}</p>`;
@@ -199,10 +221,11 @@ function payoutTable(comp) {
     );
     if (base.length > 0) {
       const body = base
-        .map(
-          ([place, amount]) =>
-            `<tr><td>${esc(place)}</td><td>${money(amount)}</td></tr>`,
-        )
+        .map(([place, amount]) => {
+          const cell = `<td>${esc(place)}</td>`;
+          const pays = `<td>${money(amount)}</td>`;
+          return `<tr>${cell}${pays}</tr>`;
+        })
         .join("");
       return `<table class="payouts"><thead><tr><th>Place</th><th>Pays</th></tr></thead><tbody>${body}</tbody></table>`;
     }
@@ -236,7 +259,11 @@ function payoutTable(comp) {
         g.start === g.end ? ordinalOf(g.start) : `${g.start}–${g.end}`;
       const width = Math.max(4, Math.round((Number(g.amountUsd) / top) * 100));
       const each = g.start !== g.end ? " each" : "";
-      return `<tr><td>${place}</td><td>${money(g.baseUsd)}</td><td>+${money(g.feeShareUsd)}</td><td><span class="share-bar"><i style="width:${width}%"></i></span><strong class="green">${money(g.amountUsd)}</strong>${each}</td></tr>`;
+      const base = `<td>${money(g.baseUsd)}</td>`;
+      const fee = `<td>+${money(g.feeShareUsd)}</td>`;
+      const bar = `<span class="share-bar"><i style="width:${width}%"></i></span>`;
+      const pays = `<strong class="green">${money(g.amountUsd)}</strong>${each}`;
+      return `<tr><td>${place}</td>${base}${fee}<td>${bar}${pays}</td></tr>`;
     })
     .join("");
   return `
@@ -252,7 +279,8 @@ function timeline(comp) {
   const fin = phases.find((p) => p.key === "final");
   const deadline = dev?.endsAt ?? comp.deadline;
   const results = fin?.endsAt ?? null;
-  const done = Math.round(100 * progressOf({ ...comp, deadline }));
+  const copy = { ...comp, deadline };
+  const done = Math.round(100 * progressOf(copy));
   return `
     <div class="timeline">
       <div class="timeline-track"><i style="width:${done}%"></i><b style="left:${done}%"></b></div>
@@ -271,7 +299,12 @@ function topFive(comp, top5) {
   const body = top5
     .map((entry) => {
       const rate = entry.value != null ? entry.value : entry.values?.judge;
-      return `<tr><td>${int(entry.rank ?? entry.performance)}</td><td class="who-cell">${avatarImg(entry.image, 20)}<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a></td><td><strong>${winRate(rate)}</strong></td><td><strong class="green">${prizeFor(comp, entry.prize_rank ?? entry.rank)}</strong></td></tr>`;
+      const rank = int(entry.rank ?? entry.performance);
+      const who = `<td class="who-cell">${avatarImg(entry.image, 20)}<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a></td>`;
+      const score = `<td><strong>${winRate(rate)}</strong></td>`;
+      const prize = prizeFor(comp, entry.prize_rank ?? entry.rank);
+      const pays = `<td><strong class="green">${prize}</strong></td>`;
+      return `<tr><td>${rank}</td>${who}${score}${pays}</tr>`;
     })
     .join("");
   return `
@@ -295,12 +328,28 @@ export function detailBlock(comp, top5, lastHour) {
       ? `${int(lastHour)} in the past hour`
       : "the judge's win rate decides";
   const places = (comp.rewardsNow ?? []).length;
+  const note = `${money(comp.rewardAmount)} prize + ${money(comp.entryFeesUsd ?? 0)} from fees`;
+  const price = paid ? money(comp.entryFeeUsd) : "Free";
+  const cls = closingSoon ? "red" : "";
   return `
     <div class="metrics">
-      ${statCard("Pot now", potOf(comp), `${money(comp.rewardAmount)} prize + ${money(comp.entryFeesUsd ?? 0)} from fees`, "green")}
-      ${statCard("To enter", paid ? money(comp.entryFeeUsd) : "Free", feeNote)}
-      <div><span>Closes in</span><strong class="${closingSoon ? "red" : ""}" data-countdown="${esc(comp.deadline)}">${leftTick(comp.deadline)}</strong><small>ends ${dateStamp(comp.deadline)}</small></div>
-      ${statCard("Entries", int(comp.submissionCount), hourNote)}
+      ${statCard(
+        "Pot now",
+        potOf(comp),
+        note,
+        "green",
+      )}
+      ${statCard(
+        "To enter",
+        price,
+        feeNote,
+      )}
+      <div><span>Closes in</span><strong class="${cls}" data-countdown="${esc(comp.deadline)}">${leftTick(comp.deadline)}</strong><small>ends ${dateStamp(comp.deadline)}</small></div>
+      ${statCard(
+        "Entries",
+        int(comp.submissionCount),
+        hourNote,
+      )}
     </div>
     <p class="actions"><a class="btn primary" href="https://make.fun/bounty/${encodeURIComponent(comp.slug)}">Enter this bounty ↗</a>
     <a class="btn quiet" href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Full leaderboard · ${int(comp.submissionCount)} entries →</a></p>
@@ -319,8 +368,7 @@ export function boardPage(data, state) {
   const finished = items.filter((c) => !isLive(c));
   const ended = state.ended ? [...finished, ...state.ended] : finished;
   const saved = state.saved ?? new Set();
-  // The Saved tab lists only starred bounties, open or closed, so a kept
-  // bounty stays findable after it ends.
+  // The Saved tab lists only starred bounties, open or closed.
   const kept = [...live, ...ended].filter((c) => saved.has(c.slug));
   const shown =
     state.tab === "ended" ? ended : state.tab === "saved" ? kept : live;
@@ -331,11 +379,10 @@ export function boardPage(data, state) {
       ? ordered.filter((c) => (c.category ?? "") === state.cat)
       : ordered;
   const matches = query
-    ? byCat.filter((c) =>
-        `${c.title} ${c.category ?? ""} ${(c.skills ?? []).join(" ")}`
-          .toLowerCase()
-          .includes(query),
-      )
+    ? byCat.filter((c) => {
+        const haystack = `${c.title} ${c.category ?? ""} ${(c.skills ?? []).join(" ")}`;
+        return haystack.toLowerCase().includes(query);
+      })
     : byCat;
   const cats = [
     "All",
@@ -362,14 +409,22 @@ export function boardPage(data, state) {
       : state.tab === "saved"
         ? '<p class="empty">Nothing saved yet. Tap ☆ Save on any bounty to keep it here — it stays in this browser even after the bounty closes.</p>'
         : '<p class="empty">Nothing matches that search.</p>';
+  const rows = matches.map((c) =>
+    bountyRow(c, c.slug === state.selected, saved.has(c.slug)),
+  );
   const rowsHtml =
     matches.length === 0
       ? emptyNote
-      : `<ul class="bounties">${matches.map((c) => bountyRow(c, c.slug === state.selected, saved.has(c.slug))).join("")}</ul>`;
+      : `<ul class="bounties">${rows.join("")}</ul>`;
+  const crumbs = selected
+    ? `Board / ${esc(selected.category ?? "")} · ${flagFor(selected)}`
+    : "";
+  const title = selected ? `<h2 class="peek-title">${esc(selected.title)}</h2>` : "";
+  const star = selected ? saveBtn(selected.slug, saved.has(selected.slug)) : "";
   const detailHtml = selected
     ? `
-        <p class="peek-crumbs">Board / ${esc(selected.category ?? "")} · ${flagFor(selected)}</p>
-        <div class="peek-head"><h2 class="peek-title">${esc(selected.title)}</h2>${saveBtn(selected.slug, saved.has(selected.slug))}</div>
+        <p class="peek-crumbs">${crumbs}</p>
+        <div class="peek-head">${title}${star}</div>
         <p class="peek-sum">${esc(selected.summary ?? "")}</p>
         ${detailBlock(selected, top5, lastHour)}
         <div class="prose clamp">${renderMd(selected.description ?? "")}</div>
@@ -379,8 +434,7 @@ export function boardPage(data, state) {
     (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
     0,
   );
-  // The soonest-closing saved bounty still live, and how many starred
-  // slugs the board no longer lists at all (removed listings).
+  // The soonest-closing saved bounty still live, and starred slugs no longer listed.
   const nextSaved = kept
     .filter(isLive)
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
@@ -390,21 +444,26 @@ export function boardPage(data, state) {
   const staleCount = saved.size - kept.length;
   const staleNote =
     staleCount > 0 ? ` · ${staleCount} no longer listed` : "";
-  // The Saved tab's line above the list: totals, plus one button to clear
-  // it all. Wiping stars is one deliberate tap, not a stray click.
+  // The Saved tab's line above the list: totals, plus one button to clear it all.
+  const note = `${countLabel(kept.length, "saved bounty", "saved bounties")} · ${money(savedPots)} in pots${nextSavedNote}${staleNote}`;
+  const btn = `<button type="button" data-action="clear-saved">Clear all saved</button>`;
   const savedTools =
     state.tab === "saved" && kept.length > 0
-      ? `<p class="saved-tools">${countLabel(kept.length, "saved bounty", "saved bounties")} · ${money(savedPots)} in pots${nextSavedNote}${staleNote} <button type="button" data-action="clear-saved">Clear all saved</button></p>`
+      ? `<p class="saved-tools">${note} ${btn}</p>`
       : "";
   const sortPills = [
     ["closing", "Soonest first"],
     ["pot", "Largest pot"],
     ["entries", "Most entered"],
   ]
-    .map(([value, label]) => pillBtn("sort", "sort", value, state.sort, label))
+    .map(([value, label]) => {
+      return pillBtn("sort", "sort", value, state.sort, label);
+    })
     .join("");
   const catPills = cats
-    .map((c) => pillBtn("cat", "cat", c, state.cat, esc(c)))
+    .map((c) => {
+      return pillBtn("cat", "cat", c, state.cat, esc(c));
+    })
     .join("");
   return `
     <div class="intro">
@@ -438,7 +497,7 @@ export function boardPage(data, state) {
     <p class="note">Pots grow when entry fees come in. A bounty past its deadline counts as finished even if it still shows as open, until results are out. You have ${countLabel(saved.size, "saved bounty", "saved bounties")} in this browser.</p>`;
 }
 
-// `saved` fills the star when this bounty is already kept.
+// `saved` fills the star when already kept.
 export function bountyPage(comp, top5, saved = false) {
   const hourAgo = Date.now() - 36e5;
   const lastHour = (comp.submissions ?? []).filter(
@@ -451,8 +510,14 @@ export function bountyPage(comp, top5, saved = false) {
   const rulesHtml = comp.rules
     ? `<details class="rules"><summary>Read the full rules</summary><div class="prose">${renderMd(comp.rules)}</div></details>`
     : "";
+  const items = recent.map((s) => {
+    const who = `<a href="#/profile/${encodeURIComponent(s.hunter)}">@${esc(s.hunter)}</a>`;
+    const when = `<span data-createdat="${esc(s.createdAt)}">${ago(s.createdAt)}</span>`;
+    const status = s.status ? ` · ${esc(s.status)}` : "";
+    return `<li>${who} — ${esc(s.title ?? "")} · ${when}${status}</li>`;
+  });
   const recentHtml = recent.length
-    ? `<h2>Latest entries</h2><ul class="latest">${recent.map((s) => `<li><a href="#/profile/${encodeURIComponent(s.hunter)}">@${esc(s.hunter)}</a> — ${esc(s.title ?? "")} · <span data-createdat="${esc(s.createdAt)}">${ago(s.createdAt)}</span>${s.status ? ` · ${esc(s.status)}` : ""}</li>`).join("")}</ul>`
+    ? `<h2>Latest entries</h2><ul class="latest">${items.join("")}</ul>`
     : "";
   return `
     <p class="crumbs"><a href="#/">← Every bounty</a> · <a href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Standings →</a></p>
@@ -480,13 +545,18 @@ function leaderRow(entry, comp) {
   const status =
     entry.status ?? (entry.judged === false ? "not judged" : "judged");
   const medal = medalFor(entry.rank);
+  const rank = int(entry.rank ?? entry.performance);
+  const cell = medal ? `${rank} ${medal}` : rank;
+  const who = `<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a>`;
+  const name = `<span class="entry-name">${esc(entry.title ?? "")}</span>`;
+  const prize = prizeFor(comp, entry.prize_rank ?? entry.rank);
   return `
     <tr>
-      <td>${int(entry.rank ?? entry.performance)}${medal ? ` ${medal}` : ""}</td>
-      <td class="who-cell">${avatarImg(entry.image, 28)}<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a><span class="entry-name">${esc(entry.title ?? "")}</span></td>
+      <td>${cell}</td>
+      <td class="who-cell">${avatarImg(entry.image, 28)}${who}${name}</td>
       <td><strong>${rate}</strong></td>
       <td>${low} – ${high}</td>
-      <td><strong class="green">${prizeFor(comp, entry.prize_rank ?? entry.rank)}</strong></td>
+      <td><strong class="green">${prize}</strong></td>
       <td style="white-space:nowrap">${bytes(size)}</td>
       <td>${esc(status)}</td>
     </tr>`;
@@ -497,9 +567,12 @@ export function standingsPage(comp, lb, shown) {
   const rest = lb.rest ?? [];
   const all = first.concat(rest);
   const page = all.slice(0, shown);
+  const left = all.length - shown;
+  const batch = Math.min(25, left);
+  const label = `Show more (${int(batch)} more of ${int(left)})`;
   const more =
     shown < all.length
-      ? `<p><button type="button" data-action="more-lb">Show more (${int(Math.min(25, all.length - shown))} more of ${int(all.length - shown)})</button></p>`
+      ? `<p><button type="button" data-action="more-lb">${label}</button></p>`
       : `<p class="note">That is all ${int(all.length)} entries.</p>`;
   const table =
     all.length === 0
@@ -537,14 +610,20 @@ export function profilePage(p) {
     entries.length === 0
       ? '<p class="empty">No entries so far.</p>'
       : `<table class="standings"><thead><tr><th>Bounty</th><th>Entry</th><th>Place</th><th>Score</th><th>Prize</th><th>Entered</th></tr></thead>
-      <tbody>${entries.map((e) => `<tr>
-        <td><a href="#/bounty/${encodeURIComponent(e.competition?.slug ?? "")}">${esc(e.competition?.title ?? e.competition?.slug ?? "")}</a></td>
+      <tbody>${entries.map((e) => {
+        const bounty = `<a href="#/bounty/${encodeURIComponent(e.competition?.slug ?? "")}">${esc(e.competition?.title ?? e.competition?.slug ?? "")}</a>`;
+        const place = e.placement != null ? `#${int(e.placement)}` : "—";
+        const score = e.score?.value != null ? winRate(e.score.value) : "—";
+        const prize = e.prize_usd != null ? money(e.prize_usd) : "—";
+        return `<tr>
+        <td>${bounty}</td>
         <td>${esc(e.title)}</td>
-        <td>${e.placement != null ? `#${int(e.placement)}` : "—"}</td>
-        <td>${e.score?.value != null ? winRate(e.score.value) : "—"}</td>
-        <td>${e.prize_usd != null ? money(e.prize_usd) : "—"}</td>
+        <td>${place}</td>
+        <td>${score}</td>
+        <td>${prize}</td>
         <td>${dateDay(e.entered_at)}</td>
-      </tr>`).join("")}</tbody></table>`;
+      </tr>`;
+      }).join("")}</tbody></table>`;
   return `
     <p class="crumbs"><a href="#/">← Every bounty</a></p>
     <div class="person">
