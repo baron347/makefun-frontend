@@ -39,7 +39,13 @@ function bountyCard(b) {
 
 /** The bounty board: live bounties, each with its pot, fee, time left and entries. */
 export function board(data, state) {
-  const items = (data.items ?? []).slice().sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+  const items = (data.items ?? []).slice().sort((a, b) => {
+    // Bounties still taking entries first, closing soonest on top; ended ones last.
+    const ae = isTakingEntries(a) ? 0 : 1;
+    const be = isTakingEntries(b) ? 0 : 1;
+    if (ae !== be) return ae - be;
+    return ae === 0 ? new Date(a.deadline) - new Date(b.deadline) : new Date(b.deadline) - new Date(a.deadline);
+  });
   const q = (state.q ?? '').trim().toLowerCase();
   const shown = q
     ? items.filter((b) => `${b.title} ${b.category ?? ''} ${(b.skills ?? []).join(' ')}`.toLowerCase().includes(q))
@@ -128,10 +134,13 @@ function lbRow(e, slug) {
   const low = e.interval?.low != null ? pct(e.interval.low) : pct(v.judge_low);
   const high = e.interval?.high != null ? pct(e.interval.high) : pct(v.judge_high);
   const size = e.values?.bytes ?? v.bytes;
+  // Avatars come back as a root-relative make.fun path ('/api/avatars/…'); resolve them
+  // against make.fun, or the browser would ask this app's own server and 404.
+  const img = e.image ? (e.image.startsWith('/') ? `https://make.fun${e.image}` : e.image) : '';
   return `
     <tr>
       <td>${num(e.rank ?? e.performance)}</td>
-      <td class="entrant">${e.image ? `<img crossorigin="anonymous" src="${esc(e.image)}" alt="" width="28" height="28" loading="lazy">` : ''}<a href="#/profile/${encodeURIComponent(e.handle)}">${esc(e.handle)}</a><span class="entry-title">${esc(e.title ?? '')}</span></td>
+      <td class="entrant">${img ? `<img crossorigin="anonymous" src="${esc(img)}" alt="" width="28" height="28" loading="lazy">` : ''}<a href="#/profile/${encodeURIComponent(e.handle)}">${esc(e.handle)}</a><span class="entry-title">${esc(e.title ?? '')}</span></td>
       <td><strong>${rate}</strong></td>
       <td>${low} – ${high}</td>
       <td>${bytes(size)}</td>

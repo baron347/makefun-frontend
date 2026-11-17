@@ -134,6 +134,14 @@ async function showProfile(handle) {
   window.__shotReady = true;
 }
 
+/** Drop any image that fails to load (a missing avatar), so no broken glyph shows. */
+function pruneBrokenImages() {
+  for (const img of app.querySelectorAll('img')) {
+    if (img.complete && img.naturalWidth === 0) img.remove();
+    else img.addEventListener('error', () => img.remove(), { once: true });
+  }
+}
+
 function parseRoute() {
   const hash = location.hash || '#/';
   const parts = hash.replace(/^#\//, '').split('/').map(decodeURIComponent);
@@ -151,6 +159,7 @@ async function render() {
   else if (route.name === 'leaderboard') await showLeaderboard(route.slug);
   else if (route.name === 'profile') await showProfile(route.handle);
   else await showBoard();
+  pruneBrokenImages();
   window.scrollTo(0, 0);
 }
 
