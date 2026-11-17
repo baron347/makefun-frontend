@@ -1,10 +1,5 @@
-/* Featherlight — a light, dense board for make.fun bounties.
-   Plain CSS, no framework, no build step. The file is organised in layers:
-   design tokens, the page skeleton, shared text and buttons, then one
-   section per view (ticker and numbers, board tools, the bounty list, the
-   detail pane, tables, the timeline, prose and profile), and finally the
-   small-screen rules that stack everything. */
-
+/* Featherlight — a light, dense board for make.fun bounties. Plain CSS,
+   no framework, no build step. */
 :root {
   --fg: #17191e;
   --sub: #5b606b;
@@ -58,8 +53,6 @@ summary:focus-visible,
 .red {
   color: var(--rose);
 }
-
-/* ---- Page skeleton: masthead, column, footer ---- */
 
 .top {
   display: flex;
@@ -123,7 +116,6 @@ footer p {
   font-weight: 600;
 }
 
-/* ---- Headings, captions and states ---- */
 
 h1 {
   font-size: 30px;
@@ -202,7 +194,6 @@ h3 {
   border: 1px solid #f5c6c0;
 }
 
-/* ---- Buttons ---- */
 
 .btn,
 button {
@@ -246,8 +237,6 @@ button:disabled {
   cursor: wait;
 }
 
-/* ---- Live feed and the four-number strip ---- */
-
 .feed {
   margin: 10px 0 0;
   padding: 6px 0 10px;
@@ -265,7 +254,7 @@ button:disabled {
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin: 12px 0 4px;
 }
@@ -302,8 +291,6 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* ---- Board tools: tabs, search, sort and kind pills ---- */
 
 .toolbar {
   display: flex;
@@ -391,8 +378,6 @@ button:disabled {
   border-color: var(--leaf);
 }
 
-/* ---- Board split: the list on the left, the detail pane on the right ---- */
-
 .duo {
   display: grid;
   grid-template-columns: minmax(460px, 6fr) 6fr;
@@ -445,7 +430,7 @@ button:disabled {
 
 .bounty-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 40px 84px 52px;
+  grid-template-columns: 64px minmax(0, 1fr) 40px 84px 52px 34px;
   gap: 8px;
   align-items: center;
   background: var(--paper);
@@ -464,6 +449,115 @@ button:disabled {
   border-color: var(--leaf);
   box-shadow: inset 3px 0 0 var(--leaf), var(--lift);
   background: #f2faf4;
+}
+
+/* A saved row keeps a warm tint, even when it is not the selected one. */
+.bounty-row.saved {
+  background: #fffdf0;
+}
+
+.bounty-row.saved.on {
+  background: #f6f9e8;
+}
+
+/* ---- Saved bounties: the star on each row and in the detail pane ---- */
+
+.cell-save {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--sub);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.save-btn:hover {
+  border-color: var(--leaf);
+  color: var(--leaf);
+}
+
+.save-btn.on {
+  background: #fff7d6;
+  border-color: #d9a400;
+  color: #8a6d00;
+}
+
+.save-btn.on:hover {
+  border-color: #b89100;
+  color: #8a6d00;
+}
+
+/* The detail pane's title row: title on the left, star on the right. */
+.peek-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.peek-head .peek-title {
+  margin-bottom: 0;
+}
+
+.peek-head .save-btn {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* The star line under a bounty page's tags. */
+.save-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: var(--sub);
+  font-size: 14px;
+}
+
+/* The Saved tab's totals line, with its one-button clear-all. */
+.saved-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  color: var(--sub);
+  font-size: 14px;
+}
+
+.saved-tools button {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.saved-tools button[data-armed] {
+  border-color: #b3261e;
+  color: #b3261e;
+}
+
+/* Text for screen readers only: present in the page, takes no space. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .cell-pot {
@@ -572,7 +666,6 @@ button:disabled {
   background: var(--rose);
 }
 
-/* ---- Tags and status flags ---- */
 
 .tags {
   display: flex;
@@ -616,8 +709,6 @@ button:disabled {
   background: var(--stone-tint);
   color: var(--stone);
 }
-
-/* ---- Bounty detail: metric cards and entry actions ---- */
 
 .metrics {
   display: grid;
@@ -664,7 +755,6 @@ button:disabled {
   margin: 0 0 4px;
 }
 
-/* ---- Tables: payouts, top 5, standings, profile entries ---- */
 
 table {
   width: 100%;
@@ -746,7 +836,6 @@ th {
   margin-top: 2px;
 }
 
-/* ---- Timeline ---- */
 
 .timeline {
   margin: 6px 0 4px;
@@ -803,7 +892,6 @@ th {
   color: var(--leaf);
 }
 
-/* ---- Prose, rules, latest entries, profile header ---- */
 
 .prose {
   max-width: 72ch;
@@ -886,7 +974,6 @@ th {
   color: var(--sub);
 }
 
-/* ---- Profile record ---- */
 
 .record {
   display: grid;
@@ -909,7 +996,6 @@ th {
   margin: 0;
 }
 
-/* ---- Small screens ---- */
 
 @media (max-width: 900px) {
   .duo {
@@ -963,7 +1049,7 @@ th {
   }
 
   .bounty-row {
-    grid-template-columns: 64px minmax(0, 1fr) 52px;
+    grid-template-columns: 64px minmax(0, 1fr) 52px 34px;
   }
 
   .cell-fee,

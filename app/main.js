@@ -1,11 +1,5 @@
-// The router and the board's memory: four routes (board, bounty,
-// standings, profile), one fetch per page, countdowns that tick without
-// rebuilding the page, and a footer that says what the page really fetched.
-//
-// Views live in views.js, the API client in api.js, formatting in
-// format.js. This file only wires them together: it reads the hash, loads
-// the data, renders, and handles the clicks that stay on the same page.
-
+// Router + board state: four routes, one fetch per page, ticking
+// countdowns, a footer that says what the page really fetched.
 import {
   fetchStats,
   flushCache,
@@ -22,9 +16,74 @@ import { leftShort, leftTick, ago } from "./format.js";
 const root = document.getElementById("app");
 const footerLine = document.getElementById("api-status");
 
-// What the board remembers while you use it: the search text, the tab, the
-// sort and kind pills, which bounty is picked, and the detail data already
-// fetched for it. A factory, so a fresh board starts from the same shape.
+// Bookmarks kept in this browser only: a list of slugs in localStorage.
+// The Set is the live copy; storage is read once at boot and written on
+// every change, never on every render.
+const SAVED_KEY = "featherlight:saved-v1";
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.filter((s) => typeof s === "string" && s))];
+  } catch {
+    // Corrupt or unreadable storage: start empty, don't break the page.
+    return [];
+  }
+}
+
+function storeSaved(list) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(list));
+  } catch {
+    // Private mode or a full store: the Set still works for this visit.
+  }
+}
+
+const savedSlugs = new Set(loadSaved());
+
+function isSaved(slug) {
+  return savedSlugs.has(slug);
+}
+
+// Flip one bounty in or out of the saved set and persist it.
+function toggleSaved(slug) {
+  if (savedSlugs.has(slug)) savedSlugs.delete(slug);
+  else savedSlugs.add(slug);
+  storeSaved([...savedSlugs]);
+  return savedSlugs.has(slug);
+}
+
+// Empty the whole saved set at once, and persist the empty list.
+function clearSaved() {
+  savedSlugs.clear();
+  storeSaved([]);
+}
+
+// A polite live region that tells screen-reader users what a star just
+// did; built once, on first use.
+let saveStatus = null;
+function announceSave(message) {
+  if (!saveStatus) {
+    saveStatus = document.createElement("p");
+    saveStatus.className = "visually-hidden";
+    saveStatus.setAttribute("aria-live", "polite");
+    document.body.append(saveStatus);
+  }
+  saveStatus.textContent = message;
+}
+
+// A star flipped in another tab updates this one too, without a reload.
+window.addEventListener("storage", (ev) => {
+  if (ev.key !== SAVED_KEY) return;
+  savedSlugs.clear();
+  for (const slug of loadSaved()) savedSlugs.add(slug);
+  if (readRoute().name === "board" && boardData) repaintBoard();
+});
+
+// What the board remembers while you use it.
 function freshBoardState() {
   return {
     q: "",
@@ -36,6 +95,7 @@ function freshBoardState() {
     selected: null,
     top5: {},
     full: {},
+    saved: savedSlugs,
   };
 }
 
@@ -43,11 +103,8 @@ const board = freshBoardState();
 let boardData = null;
 let rowsShown = 25;
 
-// --- Clocks ---------------------------------------------------------------
-// Two timers: one per second for the ticking countdowns, one per thirty
-// seconds for the coarse "time left" and "x min ago" labels. Both only
-// rewrite text nodes, never the page, so scrolling and focus survive.
-
+// Two timers (1s countdowns, 30s coarse labels) that only rewrite text
+// nodes, never the page, so scroll and focus survive.
 const clocks = {
   fast: null,
   slow: null,
@@ -75,7 +132,6 @@ const clocks = {
   },
 };
 
-// The footer line: the real request counts for the page you are on.
 function paintFooter() {
   if (!footerLine) return;
   const s = fetchStats();
@@ -100,9 +156,8 @@ function showError(err, retryKey) {
   window.__shotReady = true;
 }
 
-// Fetch the picked bounty's full record and its top 5, once each, so the
-// detail pane can show them. A failure here is not fatal: the pane falls
-// back to the list row's own data.
+// Fetch the picked bounty's full record and top 5, once each. A failure
+// here is not fatal: the pane falls back to the list row's own data.
 async function loadDetail(slug) {
   if (!slug) return;
   if (!board.full[slug]) {
@@ -122,7 +177,6 @@ async function loadDetail(slug) {
   }
 }
 
-// The Closed tab's extra rows, fetched once and kept for the session.
 async function loadEnded() {
   if (board.ended || board.endedBusy) return;
   board.endedBusy = true;
@@ -159,8 +213,7 @@ async function showBoard() {
   window.__shotReady = true;
 }
 
-// Re-render the board in place (search, tabs, pills, picking a row) without
-// refetching, keeping the scroll position.
+// Re-render the board in place without refetching, keeping scroll.
 function repaintBoard() {
   const y = window.scrollY;
   root.innerHTML = boardPage(boardData, board);
@@ -188,7 +241,7 @@ async function showBounty(slug) {
     resetStats();
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
     document.title = `${comp.title} · Featherlight`;
-    root.innerHTML = bountyPage(comp, (lb.entries ?? []).slice(0, 5));
+    root.innerHTML = bountyPage(comp, (lb.entries ?? []).slice(0, 5), isSaved(slug));
     clocks.start();
     paintFooter();
   } catch (err) {
@@ -227,8 +280,7 @@ async function showProfile(handle) {
   window.__shotReady = true;
 }
 
-// Drop images that fail to load (a missing avatar should vanish, not show
-// a broken icon).
+// Drop images that fail to load (a missing avatar should vanish).
 function dropBrokenImages() {
   for (const img of root.querySelectorAll("img")) {
     if (img.complete && img.naturalWidth === 0) {
@@ -239,8 +291,6 @@ function dropBrokenImages() {
   }
 }
 
-// "#/bounty/<slug>/leaderboard", "#/bounty/<slug>", "#/profile/<handle>",
-// anything else is the board.
 function readRoute() {
   const parts = (location.hash || "#/")
     .replace(/^#\//, "")
@@ -269,7 +319,6 @@ async function route() {
 // --- Clicks that stay on the page -----------------------------------------
 // One handler per data-action, looked up by name instead of a long if/else
 // chain, so adding a new in-page action is one entry here.
-
 function clearBoardCaches() {
   flushCache();
   board.ended = null;
@@ -288,7 +337,11 @@ const actions = {
   },
   tab(btn) {
     board.tab = btn.dataset.tab;
-    if (board.tab === "ended" && !board.ended) {
+    // The Saved tab reads the closed list too, so fetch it when missing.
+    if (
+      (board.tab === "ended" || board.tab === "saved") &&
+      !board.ended
+    ) {
       loadEnded().then(() => {
         if (readRoute().name === "board") repaintBoard();
         paintFooter();
@@ -302,6 +355,35 @@ const actions = {
   },
   cat(btn) {
     board.cat = btn.dataset.cat;
+    repaintBoard();
+  },
+  // Flip a bounty's star and re-render the page it sits on: on the board
+  // scroll survives; on a bounty page it reloads from the cached API.
+  async "toggle-save"(btn) {
+    const slug = btn.dataset.slug;
+    if (!slug) return;
+    const nowSaved = toggleSaved(slug);
+    announceSave(nowSaved ? `Saved ${slug}` : `Removed ${slug} from saved`);
+    if (readRoute().name === "board") repaintBoard();
+    else await route();
+  },
+  // Wipe every saved bounty. The first tap only arms the button — it must
+  // be tapped again within a few seconds to really clear, so a stray click
+  // cannot silently throw the whole list away.
+  "clear-saved"(btn) {
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = "1";
+      btn.textContent = "Tap again to clear all saved";
+      setTimeout(() => {
+        if (btn.isConnected) {
+          delete btn.dataset.armed;
+          btn.textContent = "Clear all saved";
+        }
+      }, 4000);
+      return;
+    }
+    clearSaved();
+    announceSave("Cleared all saved bounties");
     repaintBoard();
   },
   async select(btn, ev) {
@@ -340,6 +422,25 @@ root.addEventListener("keydown", (ev) => {
   ) {
     ev.preventDefault();
     ev.target.click();
+  }
+  // "S" on a focused row stars it, without touching the mouse: the same
+  // toggle the star button runs, on the row the keyboard is already on.
+  if (
+    (ev.key === "s" || ev.key === "S") &&
+    ev.target.matches?.('.bounty-row[data-action="select"]')
+  ) {
+    ev.preventDefault();
+    const nowSaved = toggleSaved(ev.target.dataset.slug);
+    announceSave(
+      nowSaved
+        ? `Saved ${ev.target.dataset.slug}`
+        : `Removed ${ev.target.dataset.slug} from saved`,
+    );
+    repaintBoard();
+    const again = document.querySelector(
+      `.bounty-row[data-slug="${ev.target.dataset.slug}"]`,
+    );
+    if (again) again.focus();
   }
 });
 

@@ -1,18 +1,10 @@
-// The four views, as HTML strings: the board, one bounty, the standings
-// and a public profile. Everything here is pure string building — the
-// router in main.js owns fetching, state and events; these functions only
-// turn data the API already gave us into markup.
-//
-// Shared pieces live up top (money, status flags, progress, stat cards,
-// section headings, avatars); the page builders below compose them.
-
+// The four views as HTML strings: board, bounty, standings, profile.
+// Pure string building — main.js owns fetching, state and events.
 import {
   esc,
   int,
   bytes,
   money,
-  moneyShort,
-  dateFull,
   dateDay,
   dateStamp,
   leftShort,
@@ -22,24 +14,21 @@ import {
   isLive,
   winRate,
   plural,
+  shortCount,
+  countLabel,
   renderMd,
 } from "./format.js";
 
-// --- Small value helpers ---------------------------------------------------
 
-// What a bounty is worth right now: the live pot when the API gives one,
-// otherwise the headline reward.
 function potOf(comp) {
   return money(comp.potUsd ?? comp.rewardAmount);
 }
 
-// What it costs to enter, as a short label.
 function feeText(comp) {
   const fee = Number(comp.entryFeeUsd);
   return fee > 0 ? money(comp.entryFeeUsd) : "Free";
 }
 
-// A small status flag for a bounty row or page.
 function flagFor(comp) {
   if (!isLive(comp)) return '<span class="flag done">Finished</span>';
   const leftMs = new Date(comp.deadline).getTime() - Date.now();
@@ -49,7 +38,6 @@ function flagFor(comp) {
   return '<span class="flag open">Open</span>';
 }
 
-// How far through its window a bounty is: 0 at opening, 1 at deadline.
 function progressOf(comp) {
   const start = new Date(comp.publishedAt).getTime();
   const end = new Date(comp.deadline).getTime();
@@ -57,20 +45,17 @@ function progressOf(comp) {
   return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
 }
 
-// What a rank pays out of the live pot right now.
 function prizeFor(comp, rank) {
   const rows = comp.rewardsNow ?? [];
   const row = rows.find((r) => Number(r.place) === Number(rank));
   return row ? money(row.amountUsd) : "—";
 }
 
-// An entrant's avatar URL, made absolute when the API gives a path.
 function absImg(image) {
   if (!image) return "";
   return image.startsWith("/") ? `https://make.fun${image}` : image;
 }
 
-// The medal for a top-three finish, nothing otherwise.
 function medalFor(rank) {
   if (rank === 1) return "🥇";
   if (rank === 2) return "🥈";
@@ -78,44 +63,55 @@ function medalFor(rank) {
   return "";
 }
 
-// --- Shared builders -------------------------------------------------------
 
-// One stat card: a small label, a big value, a quiet caption underneath.
 function statCard(label, value, caption, valueClass = "") {
   const cls = valueClass ? ` class="${valueClass}"` : "";
   return `<div><span>${label}</span><strong${cls}>${value}</strong><small>${caption}</small></div>`;
 }
 
-// A section heading with an optional quiet aside on the same line.
 function sectionHead(title, aside = "") {
   const side = aside ? ` <span class="sub-note">${aside}</span>` : "";
   return `<h3>${title}${side}</h3>`;
 }
 
-// An entrant's avatar image, or nothing when there is no image.
 function avatarImg(image, size) {
   const url = absImg(image);
   if (!url) return "";
   return `<img crossorigin="anonymous" src="${esc(url)}" alt="" width="${size}" height="${size}" loading="lazy">`;
 }
 
-// A filter pill button: on when its value matches the current one.
 function pillBtn(action, key, value, current, label) {
   const on = value === current ? ' class="on"' : "";
   return `<button type="button" data-action="${action}" data-${key}="${esc(value)}"${on}>${label}</button>`;
 }
 
-// --- Board pieces ----------------------------------------------------------
+// The star that saves a bounty: filled once it is kept. Its own action,
+// so the click never also selects the row it sits in. In a list row the
+// star stands alone (no word fits the narrow cell); elsewhere it keeps
+// its "Save" / "Saved" label.
+function saveBtn(slug, saved, withLabel = true) {
+  const star = saved ? "★" : "☆";
+  const label = saved ? "Saved" : "Save";
+  const cls = saved ? ' class="save-btn on"' : ' class="save-btn"';
+  const pressed = saved ? "true" : "false";
+  const word = withLabel ? `<span>${label}</span>` : "";
+  return `<button type="button" data-action="toggle-save" data-slug="${esc(slug)}"${cls} aria-pressed="${pressed}" title="${label} this bounty">${star}${word}</button>`;
+}
 
-// One row of the bounty list.
-function bountyRow(comp, selected) {
+function savedTabLabel(saved) {
+  return `Saved ${int(saved.size)}`;
+}
+
+
+// One row of the bounty list. `saved` marks the row's star as filled.
+function bountyRow(comp, selected, saved) {
   const closingSoon =
     isLive(comp) &&
     new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
   const soon = closingSoon ? '<span class="flag soon">Ending soon</span>' : "";
   const frac = Math.round(100 * progressOf(comp));
   return `
-    <li class="bounty-row${selected ? " on" : ""}" data-action="select" data-slug="${esc(comp.slug)}" tabindex="0">
+    <li class="bounty-row${selected ? " on" : ""}${saved ? " saved" : ""}" data-action="select" data-slug="${esc(comp.slug)}" tabindex="0">
       <span class="cell-pot">${potOf(comp)}<small>pot</small></span>
       <span class="cell-main">
         <span class="cell-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${esc(comp.title)}</a></span>
@@ -124,10 +120,10 @@ function bountyRow(comp, selected) {
       <span class="cell-fee">${feeText(comp)}</span>
       <span class="cell-time"><span data-deadline="${esc(comp.deadline)}">${leftShort(comp.deadline)}</span><i class="meter${closingSoon ? " hot" : ""}"><b style="width:${frac}%"></b></i></span>
       <span class="cell-count"><strong>${int(comp.submissionCount)}</strong><small>${plural(comp.submissionCount, "entry", "entries")}</small></span>
+      <span class="cell-save">${saveBtn(comp.slug, saved, false)}</span>
     </li>`;
 }
 
-// Order a list of bounties: by pot, by entries, or by deadline.
 function orderRows(list, key) {
   const copy = list.slice();
   const byPot = (a, b) =>
@@ -139,8 +135,9 @@ function orderRows(list, key) {
   return copy.sort(byClosing);
 }
 
-// The four-number strip above the board.
-function kpis(live) {
+// The five-number strip above the board; the fifth card counts starred
+// bounties, so the Saved tab's size is visible at a glance.
+function kpis(live, savedCount) {
   const pots = live.reduce(
     (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
     0,
@@ -157,13 +154,12 @@ function kpis(live) {
     <div class="kpis" role="status">
       ${statCard("Bounties open", int(live.length), "right now")}
       ${statCard("Pots right now", money(pots), "live prize money", "green")}
-      ${statCard("Entries so far", int(entries), "across open bounties")}
+      ${statCard("Entries so far", shortCount(entries), "across open bounties")}
+      ${statCard("Saved", int(savedCount), "in this browser")}
       <div><span>Closing next</span><strong${nextClass}${nextAttr}>${next ? leftTick(next.deadline) : "—"}</strong><small>${next ? esc(next.title) : ""}</small></div>
     </div>`;
 }
 
-// The live ticker: the newest entries on the selected bounty, or the newest
-// entry anywhere on the board when the selection has none.
 function feed(live, detail) {
   const parts = ['<span class="live-dot">●</span> Live now'];
   const recent = (detail?.submissions ?? [])
@@ -192,9 +188,7 @@ function feed(live, detail) {
   return `<p class="feed">${parts.join(" · ")}</p>`;
 }
 
-// --- Bounty detail pieces --------------------------------------------------
 
-// Rewards as a table, grouping runs of places that pay the same amount.
 function payoutTable(comp) {
   const rows = (comp.rewardsNow ?? [])
     .slice()
@@ -252,7 +246,6 @@ function payoutTable(comp) {
     </table>`;
 }
 
-// The opened → now → deadline → results timeline.
 function timeline(comp) {
   const phases = comp.phases ?? [];
   const dev = phases.find((p) => p.key === "dev");
@@ -272,7 +265,6 @@ function timeline(comp) {
     </div>`;
 }
 
-// The top-5 preview under a bounty.
 function topFive(comp, top5) {
   if (!top5) return '<p class="note">Top 5 still loading…</p>';
   if (top5.length === 0) return '<p class="note">Nothing ranked here yet.</p>';
@@ -290,7 +282,6 @@ function topFive(comp, top5) {
     <p class="note"><a href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Whole leaderboard · ${int(comp.submissionCount)} entries →</a></p>`;
 }
 
-// The shared detail block: stat cards, entry buttons, rewards, phases, top 5.
 export function detailBlock(comp, top5, lastHour) {
   const closingSoon =
     isLive(comp) &&
@@ -321,15 +312,18 @@ export function detailBlock(comp, top5, lastHour) {
     ${topFive(comp, top5)}`;
 }
 
-// --- Pages -----------------------------------------------------------------
 
-// The board: ticker, stats, controls, the list, and the selected bounty.
 export function boardPage(data, state) {
   const items = data.items ?? [];
   const live = items.filter(isLive);
   const finished = items.filter((c) => !isLive(c));
   const ended = state.ended ? [...finished, ...state.ended] : finished;
-  const shown = state.tab === "ended" ? ended : live;
+  const saved = state.saved ?? new Set();
+  // The Saved tab lists only starred bounties, open or closed, so a kept
+  // bounty stays findable after it ends.
+  const kept = [...live, ...ended].filter((c) => saved.has(c.slug));
+  const shown =
+    state.tab === "ended" ? ended : state.tab === "saved" ? kept : live;
   const ordered = orderRows(shown, state.sort);
   const query = (state.q ?? "").trim().toLowerCase();
   const byCat =
@@ -362,19 +356,46 @@ export function boardPage(data, state) {
         (s) => new Date(s.createdAt).getTime() > hourAgo,
       ).length
     : null;
+  const emptyNote =
+    state.tab === "saved" && saved.size > 0 && kept.length === 0
+      ? `<p class="empty">${countLabel(saved.size, "Saved bounty", "Saved bounties")} no longer on the board — the listing may have been removed. Clear all saved to free the stars.</p>`
+      : state.tab === "saved"
+        ? '<p class="empty">Nothing saved yet. Tap ☆ Save on any bounty to keep it here — it stays in this browser even after the bounty closes.</p>'
+        : '<p class="empty">Nothing matches that search.</p>';
   const rowsHtml =
     matches.length === 0
-      ? '<p class="empty">Nothing matches that search.</p>'
-      : `<ul class="bounties">${matches.map((c) => bountyRow(c, c.slug === state.selected)).join("")}</ul>`;
+      ? emptyNote
+      : `<ul class="bounties">${matches.map((c) => bountyRow(c, c.slug === state.selected, saved.has(c.slug))).join("")}</ul>`;
   const detailHtml = selected
     ? `
         <p class="peek-crumbs">Board / ${esc(selected.category ?? "")} · ${flagFor(selected)}</p>
-        <h2 class="peek-title">${esc(selected.title)}</h2>
+        <div class="peek-head"><h2 class="peek-title">${esc(selected.title)}</h2>${saveBtn(selected.slug, saved.has(selected.slug))}</div>
         <p class="peek-sum">${esc(selected.summary ?? "")}</p>
         ${detailBlock(selected, top5, lastHour)}
         <div class="prose clamp">${renderMd(selected.description ?? "")}</div>
         <p><a href="#/bounty/${encodeURIComponent(selected.slug)}">Open the full bounty page →</a></p>`
     : '<p class="empty">Pick a bounty to see it here.</p>';
+  const savedPots = kept.reduce(
+    (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
+    0,
+  );
+  // The soonest-closing saved bounty still live, and how many starred
+  // slugs the board no longer lists at all (removed listings).
+  const nextSaved = kept
+    .filter(isLive)
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
+  const nextSavedNote = nextSaved
+    ? ` · next saved closes in ${leftShort(nextSaved.deadline)}`
+    : "";
+  const staleCount = saved.size - kept.length;
+  const staleNote =
+    staleCount > 0 ? ` · ${staleCount} no longer listed` : "";
+  // The Saved tab's line above the list: totals, plus one button to clear
+  // it all. Wiping stars is one deliberate tap, not a stray click.
+  const savedTools =
+    state.tab === "saved" && kept.length > 0
+      ? `<p class="saved-tools">${countLabel(kept.length, "saved bounty", "saved bounties")} · ${money(savedPots)} in pots${nextSavedNote}${staleNote} <button type="button" data-action="clear-saved">Clear all saved</button></p>`
+      : "";
   const sortPills = [
     ["closing", "Soonest first"],
     ["pot", "Largest pot"],
@@ -391,11 +412,12 @@ export function boardPage(data, state) {
       <p>Every live bounty on make.fun — pots, fees and deadlines, fresh from the public API.</p>
     </div>
     ${feed(live, full)}
-    ${kpis(live)}
+    ${kpis(live, saved.size)}
     <div class="toolbar">
       <div class="seg" role="tablist">
         <button type="button" role="tab" data-action="tab" data-tab="live" ${state.tab === "live" ? 'class="on" aria-selected="true"' : ""}>Open ${int(live.length)}</button>
         <button type="button" role="tab" data-action="tab" data-tab="ended" ${state.tab === "ended" ? 'class="on" aria-selected="true"' : ""}>Closed ${int(ended.length)}</button>
+        <button type="button" role="tab" data-action="tab" data-tab="saved" ${state.tab === "saved" ? 'class="on" aria-selected="true"' : ""}>${savedTabLabel(saved)}</button>
       </div>
       <label class="finder">Find <input id="q" type="search" placeholder="title, category, skill…" value="${esc(state.q ?? "")}" autocomplete="off"></label>
       <button type="button" data-action="refresh">Reload</button>
@@ -404,6 +426,7 @@ export function boardPage(data, state) {
       <div class="pillrow"><span>Order</span>${sortPills}</div>
       <div class="pillrow"><span>Kind</span>${catPills}</div>
     </div>
+    ${savedTools}
     <div class="duo">
       <div class="rail">
         ${rowsHtml}
@@ -412,12 +435,11 @@ export function boardPage(data, state) {
         ${detailHtml}
       </aside>
     </div>
-    <p class="note">Pots grow when entry fees come in. A bounty past its deadline counts as finished even if it still shows as open, until results are out.</p>`;
+    <p class="note">Pots grow when entry fees come in. A bounty past its deadline counts as finished even if it still shows as open, until results are out. You have ${countLabel(saved.size, "saved bounty", "saved bounties")} in this browser.</p>`;
 }
 
-// One bounty page: summary, stats, rewards, phases, top 5, description,
-// rules, and the most recent entries.
-export function bountyPage(comp, top5) {
+// `saved` fills the star when this bounty is already kept.
+export function bountyPage(comp, top5, saved = false) {
   const hourAgo = Date.now() - 36e5;
   const lastHour = (comp.submissions ?? []).filter(
     (s) => new Date(s.createdAt).getTime() > hourAgo,
@@ -437,6 +459,7 @@ export function bountyPage(comp, top5) {
     <h1>${esc(comp.title)}</h1>
     <p class="lede">${esc(comp.summary ?? "")}</p>
     <p class="tags">${flagFor(comp)}<span class="tag">${esc(comp.category ?? "")}</span>${(comp.skills ?? []).map((s) => `<span class="tag">${esc(s)}</span>`).join("")}</p>
+    <p class="save-line">${saveBtn(comp.slug, saved)}<span>Keep this bounty in your Saved tab on the board.</span></p>
     ${detailBlock(comp, top5, lastHour)}
     <h2>About this bounty</h2>
     <div class="prose">${renderMd(comp.description ?? "")}</div>
@@ -444,7 +467,6 @@ export function bountyPage(comp, top5) {
     ${recentHtml}`;
 }
 
-// One row of a leaderboard table.
 function leaderRow(entry, comp) {
   const vals = entry.values ?? entry;
   const rate = entry.value != null ? winRate(entry.value) : winRate(vals.judge);
@@ -470,7 +492,6 @@ function leaderRow(entry, comp) {
     </tr>`;
 }
 
-// A leaderboard page: ranked entries, paged 25 at a time.
 export function standingsPage(comp, lb, shown) {
   const first = lb.entries ?? [];
   const rest = lb.rest ?? [];
@@ -497,7 +518,6 @@ export function standingsPage(comp, lb, shown) {
     <p class="note">Win rate is how often the judge picked an entry over the field. Tap a handle to open that entrant's profile.</p>`;
 }
 
-// A public profile: who they are, their record, and their entries.
 export function profilePage(p) {
   const record = p.record ?? {};
   const entries = p.solutions ?? [];

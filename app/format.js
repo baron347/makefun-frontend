@@ -1,15 +1,9 @@
-// Formatting toolbox for the board: safe HTML, money, dates, countdowns,
-// ordinals and a tiny Markdown renderer. All output is pinned to en-US and
-// UTC, so two machines render the same string for the same input.
-//
-// Nothing here touches the network or the DOM — pure functions in, strings
-// out — which keeps every view easy to test by hand in a console.
-
+// Formatting toolbox: safe HTML, money, dates, countdowns, ordinals,
+// Markdown. Pure functions — no network, no DOM.
 const MS_MINUTE = 60_000;
 const MS_HOUR = 3_600_000;
 const MS_DAY = 86_400_000;
 
-// One shared formatter per shape, built once instead of per call.
 const moneyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -39,30 +33,17 @@ export function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 }
 
-// Dollars. Whole amounts print without cents ("$250"), the rest with two.
 export function money(value) {
   const n = asNumber(value);
   if (n === null) return "—";
   return Number.isInteger(n) ? moneyFmt.format(n) : moneyCents.format(n);
 }
 
-// A compact dollar amount for tight spots: "$1.2k", "$3.4M", else money().
-export function moneyShort(value) {
-  const n = asNumber(value);
-  if (n === null) return "—";
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-  return money(n);
-}
-
-// A plain integer with thousands separators, or a dash when not a number.
 export function int(value) {
   const n = asNumber(value);
   return n === null ? "—" : intFmt.format(Math.trunc(n));
 }
 
-// A byte count as "812 B", "14 KB" or "2.3 MB".
 export function bytes(value) {
   const n = asNumber(value);
   if (n === null) return "—";
@@ -71,20 +52,6 @@ export function bytes(value) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// "Nov 17, 2026, 4:30 PM UTC" — full date plus time, always UTC.
-export function dateFull(value) {
-  const d = asDate(value);
-  if (!d) return "—";
-  return (
-    d.toLocaleString("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "UTC",
-    }) + " UTC"
-  );
-}
-
-// "Nov 17, 2026" — day only, in UTC.
 export function dateDay(value) {
   const d = asDate(value);
   if (!d) return "—";
@@ -96,7 +63,6 @@ export function dateDay(value) {
   });
 }
 
-// "Nov 17, 12:30 UTC" — the compact stamp the timeline uses.
 export function dateStamp(value) {
   const d = asDate(value);
   if (!d) return "—";
@@ -112,7 +78,6 @@ export function dateStamp(value) {
   );
 }
 
-// Split a millisecond span into whole days / hours / minutes / seconds.
 function splitSpan(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   return {
@@ -123,8 +88,6 @@ function splitSpan(ms) {
   };
 }
 
-// Time left, coarse and calm: "2d 3h left", "5h 12m left", "9m left".
-// Used for rows that refresh every thirty seconds.
 export function leftShort(value) {
   const d = asDate(value);
   if (!d) return "ended";
@@ -135,7 +98,6 @@ export function leftShort(value) {
   return `${span.minutes}m left`;
 }
 
-// Time left, ticking every second: "2d 3h 4m", "5h 12m 30s", "9m 4s".
 export function leftTick(value) {
   const d = asDate(value);
   if (!d) return "ended";
@@ -146,7 +108,6 @@ export function leftTick(value) {
   return `${span.minutes}m ${span.seconds}s`;
 }
 
-// How long ago something happened: "just now", "12 min ago", "3h 5m ago".
 export function ago(value) {
   const d = asDate(value);
   if (!d) return "just now";
@@ -160,7 +121,6 @@ export function ago(value) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-// "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st" …
 export function ordinalOf(value) {
   const n = asNumber(value);
   if (n === null) return "—";
@@ -174,30 +134,42 @@ export function ordinalOf(value) {
   return `${whole}th`;
 }
 
-// Is this bounty still taking entries? One past its deadline counts as
-// finished even while its status still says open, until results are out.
+// Live while its deadline is ahead; past it counts as finished.
 export function isLive(comp) {
   if (!comp) return false;
   if (comp.deadline) return new Date(comp.deadline).getTime() > Date.now();
   return comp.status === "open";
 }
 
-// A judge win rate stored in basis points: 9500 becomes "95.00%".
 export function winRate(value) {
   const n = asNumber(value);
   return n === null ? "—" : `${(n / 10000).toFixed(2)}%`;
 }
 
-// "1 entry" / "3 entries" — tiny plural helper for captions.
 export function plural(count, one, many) {
   return Number(count) === 1 ? one : many;
 }
 
-// --- A small safe Markdown renderer ---------------------------------------
-// Inline first: bold, code, links — applied to already-escaped text, so raw
-// HTML in the source can never leak onto the page. Block structure comes
-// from the same escaped lines: ## / ### headings, "- " lists, everything
-// else a paragraph separated by blank lines.
+// A compact count for tight spots: "1.2k", "3.4M", else the plain integer.
+export function shortCount(value) {
+  const n = asNumber(value);
+  if (n === null) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (abs >= 1_000) {
+    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return intFmt.format(Math.trunc(n));
+}
+
+// A count with its noun: "1 saved bounty" / "4 saved bounties".
+export function countLabel(count, one, many) {
+  return `${int(count)} ${plural(count, one, many)}`;
+}
+
+// --- Small safe Markdown renderer (bold/code/links on escaped text) ---
 
 function renderInline(text) {
   return esc(text)

@@ -1,15 +1,5 @@
-// A small cached client for the make.fun public API.
-//
-// The promise this client makes to the rest of the app:
-//  - every page fetches once; two callers asking for the same URL while a
-//    request is still flying share that one promise, never a second one;
-//  - a body stays fresh in memory for a minute, then is revalidated with
-//    its ETag, so a 304 answer costs no body at all;
-//  - a request that hangs is dropped after thirty seconds.
-//
-// tally() returns the real counts the footer prints, so the page can say
-// honestly what it fetched instead of guessing.
-
+// A small cached client for the make.fun public API: one fetch per page,
+// bodies fresh for a minute then revalidated with ETag, 30s timeout.
 const API_ROOT = "https://make.fun/api";
 const FRESH_FOR_MS = 60_000;
 const GIVE_UP_MS = 30_000;
@@ -105,8 +95,7 @@ class Client {
     return this.json("/competitions?status=open&activity=times");
   }
 
-  // One status worth of finished bounties: up to 500 rows, newest deadline
-  // first, walking the cursor pages until one comes back empty.
+  // One status worth of finished bounties: up to 500 rows, newest first.
   async byStatus(status) {
     const rows = [];
     let cursor = "";
@@ -122,9 +111,8 @@ class Client {
     return { items: rows };
   }
 
-  // Closed + resolved together, newest deadline first. A fetch that comes
-  // back empty is tried once more after a short pause — the closed list
-  // sometimes lags the open one by a beat.
+  // Closed + resolved together, newest deadline first; an empty first
+  // try is retried once after a short pause.
   async ended() {
     const gather = async () => {
       const closed = await this.byStatus("closed").catch(() => ({ items: [] }));
