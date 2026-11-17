@@ -60,7 +60,7 @@ Four surfaces, each reachable by a link and by its own URL:
   four small ES modules), no framework, no third-party code. The JS and CSS
   ship minified (terser / clean-css) for first-load size; the unminified
   sources are not kept in the repo. Per the dossier: first load 6 files,
-  38,015 bytes raw, 12,144 bytes gzip-9; whole app 8 files, 42,549 bytes.
+  37,874 bytes raw, 12,153 bytes gzip-9; whole app 7 files, 38,122 bytes.
 - **No blank pages.** Every route shows a loading state, then its data, or a
   clear error with a retry button when the API does not answer. The "time
   left" figures tick every second (countdowns) and every 30 seconds (rows)
@@ -74,8 +74,7 @@ Four surfaces, each reachable by a link and by its own URL:
 
 - `app/` — the frontend: `index.html`, `style.css`, `main.js` (router),
   `api.js` (cached API client), `views.js` (the four pages), `format.js`
-  (formatting and a small safe Markdown renderer), `favicon.svg`,
-  `favicon.ico`.
+  (formatting and a small safe Markdown renderer), `favicon.svg`.
 - `main.ts` — hands the entry in: copies `app/` and `screenshots/` to the
   output directory and writes `dossier.json` with the vendored library.
 - `serve.ts` — the local static server used during development.
