@@ -1,112 +1,122 @@
-// The make.fun public API, behind a tiny cache.
+// A small cached client for the make.fun public API.
 //
-// Rules of this client:
-//  - one fetch per page; identical requests that are already flying share
-//    the same promise instead of starting a second fetch;
-//  - an answer stays fresh in memory for 60 seconds, and after that it is
-//    revalidated with an ETag, so a 304 costs no body;
-//  - a request that hangs is abandoned after 30 seconds.
+// The deal this client makes with the rest of the app:
+//  - every page fetches once; two callers asking for the same URL while a
+//    fetch is still flying share that one promise, never a second request;
+//  - a body stays fresh in memory for a minute, then is revalidated with
+//    its ETag, so a 304 answer costs no body at all;
+//  - a request that hangs is dropped after thirty seconds.
 //
-// fetchStats() exposes the real counts for the footer line.
+// fetchStats() returns the real counts the footer prints.
 
-const API_ROOT = "https://make.fun/api";
-const FRESH_FOR_MS = 60_000;
-const GIVE_UP_MS = 30_000;
+const ROOT = "https://make.fun/api";
+const FRESH_MS = 60_000;
+const ABORT_MS = 30_000;
+const CLOSED_CAP = 500;
+const CLOSED_PAGES = 10;
 
-// url -> { body, etag, fetchedAt }
-const answers = new Map();
-// url -> in-flight promise
-const flying = new Map();
-const tally = { requests: 0, revalidated: 0, memory: 0, lastAt: 0 };
+// url -> { body, etag, at }
+const kept = new Map();
+// url -> promise still in flight
+const inFlight = new Map();
+
+const counts = { sent: 0, notModified: 0, fromMemory: 0, lastAt: 0 };
 
 export function fetchStats() {
-  return { req: tally.requests, notMod: tally.revalidated, mem: tally.memory, at: tally.lastAt };
+  return {
+    req: counts.sent,
+    notMod: counts.notModified,
+    mem: counts.fromMemory,
+    at: counts.lastAt,
+  };
 }
 
 export function resetStats() {
-  tally.requests = 0;
-  tally.revalidated = 0;
-  tally.memory = 0;
-  tally.lastAt = 0;
+  counts.sent = 0;
+  counts.notModified = 0;
+  counts.fromMemory = 0;
+  counts.lastAt = 0;
 }
 
 export function flushCache() {
-  answers.clear();
+  kept.clear();
 }
 
-async function get(path) {
-  const known = answers.get(path);
-  if (known && Date.now() - known.fetchedAt < FRESH_FOR_MS) {
-    tally.memory++;
-    tally.lastAt = Date.now();
+function fresh(entry) {
+  return entry && Date.now() - entry.at < FRESH_MS;
+}
+
+async function fetchJson(path) {
+  const known = kept.get(path);
+  if (fresh(known)) {
+    counts.fromMemory++;
+    counts.lastAt = Date.now();
     return known.body;
   }
-  if (flying.has(path)) return flying.get(path);
+  const shared = inFlight.get(path);
+  if (shared) return shared;
 
-  const task = (async () => {
+  const job = (async () => {
     const headers = known?.etag ? { "If-None-Match": known.etag } : {};
-    tally.requests++;
-    const abort = new AbortController();
-    const clock = setTimeout(() => abort.abort(), GIVE_UP_MS);
-    let reply;
+    counts.sent++;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ABORT_MS);
+    let res;
     try {
-      reply = await fetch(API_ROOT + path, { headers, signal: abort.signal });
+      res = await fetch(ROOT + path, { headers, signal: ctrl.signal });
     } finally {
-      clearTimeout(clock);
+      clearTimeout(timer);
     }
-    if (reply.status === 304 && known) {
-      tally.revalidated++;
-      tally.lastAt = Date.now();
-      known.fetchedAt = Date.now();
+    if (res.status === 304 && known) {
+      counts.notModified++;
+      counts.lastAt = Date.now();
+      known.at = Date.now();
       return known.body;
     }
-    if (!reply.ok) {
-      const failure = new Error(`make.fun API ${reply.status} for ${path}`);
-      failure.status = reply.status;
-      throw failure;
+    if (!res.ok) {
+      const err = new Error(`make.fun API ${res.status} for ${path}`);
+      err.status = res.status;
+      throw err;
     }
-    const body = await reply.json();
-    tally.lastAt = Date.now();
-    answers.set(path, {
-      body,
-      etag: reply.headers.get("ETag"),
-      fetchedAt: Date.now(),
-    });
+    const body = await res.json();
+    counts.lastAt = Date.now();
+    kept.set(path, { body, etag: res.headers.get("ETag"), at: Date.now() });
     return body;
   })();
 
-  flying.set(path, task);
+  inFlight.set(path, job);
   try {
-    return await task;
+    return await job;
   } finally {
-    flying.delete(path);
+    inFlight.delete(path);
   }
 }
 
-// The open board, with the activity times the ticker and the past-hour
-// counts read from.
-export const listOpen = () => get("/competitions?status=open&activity=times");
+// The open board, carrying the activity times the ticker reads.
+export const listOpen = () => fetchJson("/competitions?status=open&activity=times");
 
-// Closed / resolved bounties for the board's Closed tab, up to 500, newest
-// deadline first. Walks the cursor pages; an empty page simply ends it.
+// Closed and resolved bounties for the board's Closed tab: up to 500 rows,
+// newest deadline first, walking the cursor pages until one comes back empty.
 export async function listByStatus(status) {
-  const collected = [];
+  const rows = [];
   let cursor = "";
-  for (let page = 0; page < 10 && collected.length < 500; page++) {
-    const next = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-    const chunk = await get(`/competitions?status=${status}&activity=times${next}`);
-    collected.push(...(chunk.items ?? []));
+  for (let page = 0; page < CLOSED_PAGES && rows.length < CLOSED_CAP; page++) {
+    const tail = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const chunk = await fetchJson(
+      `/competitions?status=${status}&activity=times${tail}`,
+    );
+    rows.push(...(chunk.items ?? []));
     cursor = chunk.next_cursor ?? "";
     if (!cursor) break;
   }
-  return { items: collected };
+  return { items: rows };
 }
 
 export const oneBounty = (slug) =>
-  get(`/competitions/${encodeURIComponent(slug)}`);
+  fetchJson(`/competitions/${encodeURIComponent(slug)}`);
 
 export const oneStandings = (slug) =>
-  get(`/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`);
+  fetchJson(`/competitions/${encodeURIComponent(slug)}/leaderboard?rows=first`);
 
 export const oneProfile = (handle) =>
-  get(`/profiles/${encodeURIComponent(handle)}`);
+  fetchJson(`/profiles/${encodeURIComponent(handle)}`);

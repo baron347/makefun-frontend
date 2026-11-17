@@ -1,14 +1,13 @@
-# Bounties · make.fun
+# Featherlight · make.fun bounties
 
 [![make.fun bounty](https://make.fun/badge/makefun-frontend-01.svg)](https://make.fun/bounty/makefun-frontend-01)
 [![rank](https://make.fun/badge/makefun-frontend-01/baron347/makefun-frontend/rank.svg)](https://make.fun/bounty/makefun-frontend-01)
 [![reward](https://make.fun/badge/makefun-frontend-01/baron347/makefun-frontend/reward.svg)](https://make.fun/bounty/makefun-frontend-01)
 
-A light, read-only browser for [make.fun](https://make.fun), made for the
+A light, read-only browser for [make.fun](https://make.fun), built for the
 [Build the best make.fun frontend](https://make.fun/bounty/makefun-frontend-01)
-bounty. Nothing but static files — hand-written JavaScript, no framework,
-no build step — and every number on screen is fetched live from the
-make.fun public API.
+bounty. Static files only — hand-written JavaScript, no framework, no build
+step — and every number on screen comes live from the make.fun public API.
 
 ## Running it
 
@@ -26,7 +25,7 @@ Every view has its own URL, so each one can be linked or refreshed:
 - **Board** (`#/`) — open bounties in a master-detail layout. The left
   column lists them compactly: live pot, entry fee, time left with a
   progress bar, entry count. The right pane shows the bounty you picked,
-  in full. Above them are four live numbers (bounties open, pots right
+  in full. Above them sit four live numbers (bounties open, pots right
   now, entries so far, closing next, ticking down every second) and a
   ticker naming the newest entries. Open and Closed tabs carry their
   counts; sort chips (soonest first, largest pot, most entered), kind
@@ -43,9 +42,9 @@ Every view has its own URL, so each one can be linked or refreshed:
   the bounty you picked.
 - **Standings** (`#/bounty/<slug>/leaderboard`) — the bounty's ranked
   entries: judge win rate, 90% range, prize now (what each place pays out
-  of the live pot), entry size and status. Twenty-five rows at a time from
-  a single fetch; the rest page in from that same answer. Clicking a
-  handle opens that entrant's profile.
+  of the live pot), entry size and status, with medals for the top three.
+  Twenty-five rows at a time from a single fetch; the rest page in from
+  that same answer. Clicking a handle opens that entrant's profile.
 - **Profile** (`#/profile/<handle>`) — a public profile: photo, bio,
   links, when they joined, their record (bounties entered, placed, won,
   podiums, best finish, winnings) and every entry they have made, each

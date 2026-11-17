@@ -1,6 +1,6 @@
-// The router and board state: four routes (board, bounty, standings,
-// profile), one fetch per page, countdowns that tick without rebuilding the
-// page, and a footer that says what the page actually fetched.
+// The router and the board's memory: four routes (board, bounty,
+// standings, profile), one fetch per page, countdowns that tick without
+// rebuilding the page, and a footer that says what the page really fetched.
 
 import {
   fetchStats,
@@ -19,8 +19,8 @@ const root = document.getElementById("app");
 const footerLine = document.getElementById("api-status");
 
 // What the board remembers while you use it: the search text, the tab, the
-// sort and category chips, which bounty is picked, and the detail data
-// already fetched for it.
+// sort and kind chips, which bounty is picked, and the detail data already
+// fetched for it.
 const board = {
   q: "",
   tab: "live",
@@ -35,18 +35,18 @@ const board = {
 
 let boardData = null;
 let rowsShown = 25;
-let fastTimer = null;
-let slowTimer = null;
+let tickFast = null;
+let tickSlow = null;
 
-function runClocks() {
+function startClocks() {
   stopClocks();
-  fastTimer = setInterval(() => {
+  tickFast = setInterval(() => {
     for (const el of document.querySelectorAll("[data-countdown]")) {
       el.textContent = leftExact(el.dataset.countdown);
     }
-    updateFooter();
+    paintFooter();
   }, 1000);
-  slowTimer = setInterval(() => {
+  tickSlow = setInterval(() => {
     for (const el of root.querySelectorAll("[data-deadline]")) {
       el.textContent = left(el.dataset.deadline);
     }
@@ -57,13 +57,13 @@ function runClocks() {
 }
 
 function stopClocks() {
-  if (fastTimer) clearInterval(fastTimer);
-  if (slowTimer) clearInterval(slowTimer);
-  fastTimer = slowTimer = null;
+  if (tickFast) clearInterval(tickFast);
+  if (tickSlow) clearInterval(tickSlow);
+  tickFast = tickSlow = null;
 }
 
-// The footer line: real request counts for the page you are on.
-function updateFooter() {
+// The footer line: the real request counts for the page you are on.
+function paintFooter() {
   if (!footerLine) return;
   const s = fetchStats();
   const ago = s.at
@@ -73,11 +73,11 @@ function updateFooter() {
   footerLine.textContent = `This view: ${s.req} API request${plural} · ${s.notMod} unchanged (304) · ${s.mem} from memory · updated ${ago}`;
 }
 
-function renderLoading(title) {
+function showLoading(title) {
   root.innerHTML = `<h1>${title}</h1><p class="loading">Loading live data from make.fun…</p>`;
 }
 
-function renderError(err, retryKey) {
+function showError(err, retryKey) {
   const missing = err?.status === 404;
   root.innerHTML = `
     <h1>${missing ? "Not found" : "Could not load this page"}</h1>
@@ -89,14 +89,14 @@ function renderError(err, retryKey) {
 
 // Fetch the picked bounty's full record and its top 5, once each, so the
 // detail pane can show them. A failure here is not fatal: the pane falls
-// back to the list's own data.
+// back to the list row's own data.
 async function loadDetail(slug) {
   if (!slug) return;
   if (!board.full[slug]) {
     try {
       board.full[slug] = await oneBounty(slug);
     } catch {
-      // detail pane falls back to the list row's data
+      // the detail pane falls back to the list row's data
     }
   }
   if (!board.top5[slug]) {
@@ -110,7 +110,7 @@ async function loadDetail(slug) {
 }
 
 async function showBoard() {
-  renderLoading("Open bounties");
+  showLoading("Open bounties");
   try {
     resetStats();
     boardData = await listOpen();
@@ -120,15 +120,15 @@ async function showBoard() {
         ? "makefun-frontend-01"
         : items[0]?.slug ?? null;
     }
-    document.title = "Open bounties | make.fun";
+    document.title = "Open bounties · Featherlight";
     await loadDetail(board.selected);
     await loadEnded();
     root.innerHTML = boardPage(boardData, board);
-    wireSearch();
-    runClocks();
-    updateFooter();
+    attachSearch();
+    startClocks();
+    paintFooter();
   } catch (err) {
-    return void renderError(err, "board");
+    return void showError(err, "board");
   }
   window.__shotReady = true;
 }
@@ -155,7 +155,7 @@ async function loadEnded() {
     }
     board.ended = rows;
   } catch {
-    // The Closed tab simply stays with what the open list already had.
+    // The Closed tab simply keeps what the open list already had.
   } finally {
     board.endedBusy = false;
   }
@@ -166,12 +166,12 @@ async function loadEnded() {
 function repaintBoard() {
   const y = window.scrollY;
   root.innerHTML = boardPage(boardData, board);
-  wireSearch();
+  attachSearch();
   window.scrollTo(0, y);
-  updateFooter();
+  paintFooter();
 }
 
-function wireSearch() {
+function attachSearch() {
   const input = document.getElementById("q");
   if (!input) return;
   input.addEventListener("input", () => {
@@ -185,53 +185,53 @@ function wireSearch() {
 }
 
 async function showBounty(slug) {
-  renderLoading("Bounty");
+  showLoading("Bounty");
   try {
     resetStats();
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
-    document.title = `${comp.title} | make.fun`;
+    document.title = `${comp.title} · Featherlight`;
     root.innerHTML = bountyPage(comp, (lb.entries ?? []).slice(0, 5));
-    runClocks();
-    updateFooter();
+    startClocks();
+    paintFooter();
   } catch (err) {
-    return void renderError(err, `bounty:${slug}`);
+    return void showError(err, `bounty:${slug}`);
   }
   window.__shotReady = true;
 }
 
 async function showStandings(slug) {
-  renderLoading("Leaderboard");
+  showLoading("Leaderboard");
   try {
     resetStats();
     const [comp, lb] = await Promise.all([oneBounty(slug), oneStandings(slug)]);
-    document.title = `Leaderboard — ${comp.title} | make.fun`;
+    document.title = `Standings — ${comp.title} · Featherlight`;
     rowsShown = 25;
     root.innerHTML = standingsPage(comp, lb, rowsShown);
     root.dataset.lbSlug = slug;
-    updateFooter();
+    paintFooter();
   } catch (err) {
-    return void renderError(err, `leaderboard:${slug}`);
+    return void showError(err, `leaderboard:${slug}`);
   }
   window.__shotReady = true;
 }
 
 async function showProfile(handle) {
-  renderLoading("Profile");
+  showLoading("Profile");
   try {
     resetStats();
     const p = await oneProfile(handle);
-    document.title = `@${p.handle} | make.fun`;
+    document.title = `@${p.handle} · Featherlight`;
     root.innerHTML = profilePage(p);
-    updateFooter();
+    paintFooter();
   } catch (err) {
-    return void renderError(err, `profile:${handle}`);
+    return void showError(err, `profile:${handle}`);
   }
   window.__shotReady = true;
 }
 
 // Drop images that fail to load (a missing avatar should vanish, not show
 // a broken icon).
-function pruneBrokenImages() {
+function dropBrokenImages() {
   for (const img of root.querySelectorAll("img")) {
     if (img.complete && img.naturalWidth === 0) {
       img.remove();
@@ -264,7 +264,7 @@ async function route() {
   else if (r.name === "leaderboard") await showStandings(r.slug);
   else if (r.name === "profile") await showProfile(r.handle);
   else await showBoard();
-  pruneBrokenImages();
+  dropBrokenImages();
   window.scrollTo(0, 0);
 }
 
@@ -286,7 +286,7 @@ root.addEventListener("click", async (ev) => {
     if (board.tab === "ended" && !board.ended) {
       loadEnded().then(() => {
         if (readRoute().name === "board") repaintBoard();
-        updateFooter();
+        paintFooter();
       });
     }
     repaintBoard();

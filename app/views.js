@@ -17,7 +17,7 @@ import {
 
 // What a bounty is worth right now: the live pot when the API gives one,
 // otherwise the headline reward.
-function currentPot(comp) {
+function potNow(comp) {
   return usd(comp.potUsd ?? comp.rewardAmount);
 }
 
@@ -30,8 +30,8 @@ function feeLabel(comp) {
 // A small status pill for a bounty row or page.
 function stateBadge(comp) {
   if (!openNow(comp)) return '<span class="badge ended">Finished</span>';
-  const remaining = new Date(comp.deadline).getTime() - Date.now();
-  if (remaining < 24 * 60 * 60 * 1000) {
+  const leftMs = new Date(comp.deadline).getTime() - Date.now();
+  if (leftMs < 24 * 60 * 60 * 1000) {
     return '<span class="badge soon">Ending soon</span>';
   }
   return '<span class="badge open">Open</span>';
@@ -42,8 +42,7 @@ function elapsedFrac(comp) {
   const start = new Date(comp.publishedAt).getTime();
   const end = new Date(comp.deadline).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
-  const frac = (Date.now() - start) / (end - start);
-  return Math.min(1, Math.max(0, frac));
+  return Math.min(1, Math.max(0, (Date.now() - start) / (end - start)));
 }
 
 // What a rank pays out of the live pot right now.
@@ -60,17 +59,17 @@ function avatarUrl(image) {
 }
 
 // One row of the bounty list.
-function listRow(comp, isSelected) {
+function listRow(comp, selected) {
   const closingSoon =
     openNow(comp) &&
     new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
-  const soonBadge = closingSoon ? '<span class="badge soon">Ending soon</span>' : "";
+  const soon = closingSoon ? '<span class="badge soon">Ending soon</span>' : "";
   return `
-    <li class="row${isSelected ? " on" : ""}" data-action="select" data-slug="${escapeHtml(comp.slug)}" tabindex="0">
-      <span class="r-pot">${currentPot(comp)}<small>pot</small></span>
+    <li class="row${selected ? " on" : ""}" data-action="select" data-slug="${escapeHtml(comp.slug)}" tabindex="0">
+      <span class="r-pot">${potNow(comp)}<small>pot</small></span>
       <span class="r-main">
-      <span class="r-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${escapeHtml(comp.title)}</a></span>
-        <span class="r-sub">${soonBadge}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${escapeHtml(comp.summary ?? comp.description ?? "")}</span>
+        <span class="r-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${escapeHtml(comp.title)}</a></span>
+        <span class="r-sub">${soon}<span class="tag">${escapeHtml(comp.category ?? "")}</span>${escapeHtml(comp.summary ?? comp.description ?? "")}</span>
       </span>
       <span class="r-fee">${feeLabel(comp)}</span>
       <span class="r-time"><span data-deadline="${escapeHtml(comp.deadline)}">${left(comp.deadline)}</span><i class="bar${closingSoon ? " hot" : ""}"><b style="width:${Math.round(100 * elapsedFrac(comp))}%"></b></i></span>
@@ -108,9 +107,9 @@ function statsStrip(live) {
   const nextAttr = next ? ` data-countdown="${escapeHtml(next.deadline)}"` : "";
   return `
     <div class="stats" role="status">
-      <div><span>Bounties open</span><strong>${fmtInt(live.length)}</strong></div>
-      <div><span>Pots right now</span><strong class="green">${usd(pots)}</strong></div>
-      <div><span>Entries so far</span><strong>${fmtInt(entries)}</strong></div>
+      <div><span>Bounties open</span><strong>${fmtInt(live.length)}</strong><small>right now</small></div>
+      <div><span>Pots right now</span><strong class="green">${usd(pots)}</strong><small>live prize money</small></div>
+      <div><span>Entries so far</span><strong>${fmtInt(entries)}</strong><small>across open bounties</small></div>
       <div><span>Closing next</span><strong class="${withinHour ? "red" : ""}"${nextAttr}>${next ? leftExact(next.deadline) : "—"}</strong><small>${next ? escapeHtml(next.title) : ""}</small></div>
     </div>`;
 }
@@ -163,17 +162,17 @@ function rewardsTable(comp) {
         .join("");
       return `<table class="rewards"><thead><tr><th>Place</th><th>Pays</th></tr></thead><tbody>${body}</tbody></table>`;
     }
-    return `<p>Reward: <strong>${currentPot(comp)}</strong></p>`;
+    return `<p>Reward: <strong>${potNow(comp)}</strong></p>`;
   }
   const groups = [];
   for (const row of rows) {
     const last = groups[groups.length - 1];
-    const continues =
+    const same =
       last &&
       last.baseUsd === row.baseUsd &&
       last.feeShareUsd === row.feeShareUsd &&
       Number(row.place) === last.end + 1;
-    if (continues) {
+    if (same) {
       last.end = Number(row.place);
       last.amountUsd = row.amountUsd;
     } else {
@@ -259,14 +258,14 @@ export function detailBlock(comp, top5, lastHour) {
       : "the judge's win rate decides";
   return `
     <div class="cards">
-      <div><span>Pot now</span><strong class="green">${currentPot(comp)}</strong><small>${usd(comp.rewardAmount)} prize + ${usd(comp.entryFeesUsd ?? 0)} from fees</small></div>
+      <div><span>Pot now</span><strong class="green">${potNow(comp)}</strong><small>${usd(comp.rewardAmount)} prize + ${usd(comp.entryFeesUsd ?? 0)} from fees</small></div>
       <div><span>To enter</span><strong>${paid ? usd(comp.entryFeeUsd) : "Free"}</strong><small>${feeNote}</small></div>
       <div><span>Closes in</span><strong class="${closingSoon ? "red" : ""}" data-countdown="${escapeHtml(comp.deadline)}">${leftExact(comp.deadline)}</strong><small>ends ${stamp(comp.deadline)}</small></div>
       <div><span>Entries</span><strong>${fmtInt(comp.submissionCount)}</strong><small>${hourNote}</small></div>
     </div>
     <p class="cta"><a class="btn go" href="https://make.fun/bounty/${encodeURIComponent(comp.slug)}">Enter this bounty ↗</a>
     <a class="btn ghost" href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Full leaderboard · ${fmtInt(comp.submissionCount)} entries →</a></p>
-    <h3>Rewards <span class="h-sub">${fmtInt((comp.rewardsNow ?? []).length)} places split the pot of ${currentPot(comp)}</span></h3>
+    <h3>Rewards <span class="h-sub">${fmtInt((comp.rewardsNow ?? []).length)} places split the pot of ${potNow(comp)}</span></h3>
     ${rewardsTable(comp)}
     <h3>Dates &amp; phases</h3>
     ${phaseStrip(comp)}
@@ -327,6 +326,10 @@ export function boardPage(data, state) {
         <p><a href="#/bounty/${encodeURIComponent(selected.slug)}">Open the full bounty page →</a></p>`
     : '<p class="empty">Pick a bounty to see it here.</p>';
   return `
+    <div class="pagehead">
+      <h1>Open bounties</h1>
+      <p>Every live bounty on make.fun — pots, fees and deadlines, fresh from the public API.</p>
+    </div>
     ${activityTicker(live, full)}
     ${statsStrip(live)}
     <div class="controls">
@@ -338,14 +341,14 @@ export function boardPage(data, state) {
       <button type="button" data-action="refresh">Reload</button>
     </div>
     <div class="chiprows">
-    <div class="chips"><span>Order</span>
-      <button type="button" data-action="sort" data-sort="closing" ${state.sort === "closing" ? 'class="on"' : ""}>Soonest first</button>
-      <button type="button" data-action="sort" data-sort="pot" ${state.sort === "pot" ? 'class="on"' : ""}>Largest pot</button>
-      <button type="button" data-action="sort" data-sort="entries" ${state.sort === "entries" ? 'class="on"' : ""}>Most entered</button>
-    </div>
-    <div class="chips"><span>Kind</span>
-      ${cats.map((c) => `<button type="button" data-action="cat" data-cat="${escapeHtml(c)}" ${state.cat === c ? 'class="on"' : ""}>${escapeHtml(c)}</button>`).join("")}
-    </div>
+      <div class="chips"><span>Order</span>
+        <button type="button" data-action="sort" data-sort="closing" ${state.sort === "closing" ? 'class="on"' : ""}>Soonest first</button>
+        <button type="button" data-action="sort" data-sort="pot" ${state.sort === "pot" ? 'class="on"' : ""}>Largest pot</button>
+        <button type="button" data-action="sort" data-sort="entries" ${state.sort === "entries" ? 'class="on"' : ""}>Most entered</button>
+      </div>
+      <div class="chips"><span>Kind</span>
+        ${cats.map((c) => `<button type="button" data-action="cat" data-cat="${escapeHtml(c)}" ${state.cat === c ? 'class="on"' : ""}>${escapeHtml(c)}</button>`).join("")}
+      </div>
     </div>
     <div class="split">
       <div class="list-col">
@@ -404,14 +407,16 @@ function leaderRow(entry, comp) {
     : "";
   const status =
     entry.status ?? (entry.judged === false ? "not judged" : "judged");
+  const medal =
+    entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : "";
   return `
     <tr>
-      <td>${fmtInt(entry.rank ?? entry.performance)}</td>
+      <td>${fmtInt(entry.rank ?? entry.performance)}${medal ? ` ${medal}` : ""}</td>
       <td class="entrant">${pic}<a href="#/profile/${encodeURIComponent(entry.handle)}">${escapeHtml(entry.handle)}</a><span class="entry-title">${escapeHtml(entry.title ?? "")}</span></td>
       <td><strong>${rate}</strong></td>
       <td>${low} – ${high}</td>
       <td><strong class="green">${prizeAt(comp, entry.prize_rank ?? entry.rank)}</strong></td>
-      <td>${fmtBytes(size)}</td>
+      <td style="white-space:nowrap">${fmtBytes(size)}</td>
       <td>${escapeHtml(status)}</td>
     </tr>`;
 }

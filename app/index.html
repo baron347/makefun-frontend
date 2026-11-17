@@ -3,25 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Featherlight: a fast, read-only way to browse make.fun bounties — the live board, bounty pages, standings and public profiles, straight from the make.fun public API.">
-<title>Bounties · make.fun</title>
+<meta name="description" content="Featherlight — a fast, read-only browser for make.fun bounties: the live board, bounty pages, standings and public profiles, fetched straight from the make.fun public API.">
+<meta name="theme-color" content="#0b6e36">
+<title>Featherlight · make.fun bounties</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
-<!-- One ES module boots the whole app and renders into #app. -->
+<!-- A single ES module boots the app and renders into #app. -->
 <script type="module" src="main.js"></script>
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="#/">make.fun <span>bounties</span></a>
+  <a class="brand" href="#/"><span class="mark" aria-hidden="true">✦</span> Featherlight <em>· make.fun bounties</em></a>
   <nav aria-label="Main">
-    <a href="#/">Bounties</a>
+    <a href="#/">Board</a>
     <a href="https://make.fun">make.fun ↗</a>
   </nav>
 </header>
 <main id="app" aria-live="polite"></main>
 <footer>
   <p id="api-status">This view: nothing fetched yet</p>
-  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are cached in memory and revalidated with ETags · read-only: no sign-in, no tracking, nothing is sent anywhere</p>
+  <p>An unofficial make.fun client · reads live data from the <a href="https://make.fun/api/openapi.json">make.fun public API</a> · answers are cached in memory and revalidated with ETags · read-only: no sign-in, no tracking, nothing sent anywhere</p>
 </footer>
 <noscript><p class="error">This page needs JavaScript — it fetches the live bounty data from the make.fun public API in your browser.</p></noscript>
 </body>
