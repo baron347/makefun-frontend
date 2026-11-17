@@ -1,144 +1,452 @@
-import{ago,bytes,date,dtime,esc,isTakingEntries,md,money,num,pct,placeLabel,shortDate,timeLeft,timeLeftPrecise}from"./format.js";const pot=e=>money(e.potUsd??e.rewardAmount),fee=e=>e.entryFeeUsd&&Number(e.entryFeeUsd)>0?`${money(e.entryFeeUsd)} fee`:"Free entry";function statusBadge(e){if(!isTakingEntries(e))return'<span class="badge ended">Ended</span>';return new Date(e.deadline).getTime()-Date.now()<864e5?'<span class="badge soon">Closing soon</span>':'<span class="badge open">Open</span>'}function elapsedFrac(e){const t=new Date(e.publishedAt).getTime(),n=new Date(e.deadline).getTime();return!Number.isFinite(t)||!Number.isFinite(n)||n<=t?0:Math.min(1,Math.max(0,(Date.now()-t)/(n-t)))}function prizeNow(e,t){const n=(e.rewardsNow??[]).find(e=>Number(e.place)===Number(t));return n?money(n.amountUsd):"—"}function boardRow(e,t){const n=isTakingEntries(e)&&new Date(e.deadline).getTime()-Date.now()<864e5;return`
-    <li class="row${t?" on":""}" data-action="select" data-slug="${esc(e.slug)}" tabindex="0">
-      <span class="r-pot">${pot(e)}<small>pot</small></span>
+import {
+  ago,
+  bytes,
+  dtime,
+  esc,
+  isTakingEntries,
+  md,
+  money,
+  num,
+  pct,
+  placeLabel,
+  shortDate,
+  timeLeft,
+  timeLeftPrecise,
+} from "./format.js";
+
+// What a bounty is worth right now: the live pot when the API gives one,
+// otherwise the headline reward.
+function potOf(comp) {
+  return money(comp.potUsd ?? comp.rewardAmount);
+}
+
+// What it costs to enter, as a short label.
+function feeLabel(comp) {
+  const fee = Number(comp.entryFeeUsd);
+  if (fee > 0) return money(comp.entryFeeUsd);
+  return "Free";
+}
+
+// A small status pill for a bounty row or page.
+function badgeFor(comp) {
+  if (!isTakingEntries(comp)) {
+    return '<span class="badge ended">Finished</span>';
+  }
+  const msLeft = new Date(comp.deadline).getTime() - Date.now();
+  if (msLeft < 24 * 60 * 60 * 1000) {
+    return '<span class="badge soon">Ending soon</span>';
+  }
+  return '<span class="badge open">Open</span>';
+}
+
+// How far through its window a bounty is: 0 at opening, 1 at deadline.
+function elapsed(comp) {
+  const start = new Date(comp.publishedAt).getTime();
+  const end = new Date(comp.deadline).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  const frac = (Date.now() - start) / (end - start);
+  return Math.min(1, Math.max(0, frac));
+}
+
+// What a rank pays out of the live pot right now.
+function prizeAt(comp, rank) {
+  const rows = comp.rewardsNow ?? [];
+  const row = rows.find((r) => Number(r.place) === Number(rank));
+  return row ? money(row.amountUsd) : "—";
+}
+
+// An entrant's avatar URL, made absolute when the API gives a path.
+function avatarUrl(image) {
+  if (!image) return "";
+  return image.startsWith("/") ? `https://make.fun${image}` : image;
+}
+
+// One row of the bounty list.
+function rowHtml(comp, isSelected) {
+  const closingSoon =
+    isTakingEntries(comp) &&
+    new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+  const fee = feeLabel(comp);
+  return `
+    <li class="row${isSelected ? " on" : ""}" data-action="select" data-slug="${esc(comp.slug)}" tabindex="0">
+      <span class="r-pot">${potOf(comp)}<small>pot</small></span>
       <span class="r-main">
-      <span class="r-title"><a href="#/bounty/${encodeURIComponent(e.slug)}">${esc(e.title)}</a></span>
-        <span class="r-sub">${n?'<span class="badge soon">Closing soon</span>':""}<span class="tag">${esc(e.category??"")}</span>${esc(e.summary??e.description??"")}</span>
+      <span class="r-title"><a href="#/bounty/${encodeURIComponent(comp.slug)}">${esc(comp.title)}</a></span>
+        <span class="r-sub">${closingSoon ? '<span class="badge soon">Ending soon</span>' : ""}<span class="tag">${esc(comp.category ?? "")}</span>${esc(comp.summary ?? comp.description ?? "")}</span>
       </span>
-      <span class="r-fee">${e.entryFeeUsd&&Number(e.entryFeeUsd)>0?money(e.entryFeeUsd):"Free"}</span>
-      <span class="r-time"><span data-deadline="${esc(e.deadline)}">${timeLeft(e.deadline)}</span><i class="bar${n?" hot":""}"><b style="width:${Math.round(100*elapsedFrac(e))}%"></b></i></span>
-      <span class="r-entries"><strong>${num(e.submissionCount)}</strong><small>entries</small></span>
-    </li>`}function sortItems(e,t){const n=e.slice();return"pot"===t?n.sort((e,t)=>Number(t.potUsd??t.rewardAmount)-Number(e.potUsd??e.rewardAmount)):"entries"===t?n.sort((e,t)=>(t.submissionCount??0)-(e.submissionCount??0)):n.sort((e,t)=>new Date(e.deadline)-new Date(t.deadline))}function statsStrip(e){const t=e.reduce((e,t)=>e+Number(t.potUsd??t.rewardAmount??0),0),n=e.reduce((e,t)=>e+(t.submissionCount??0),0),s=e.slice().sort((e,t)=>new Date(e.deadline)-new Date(t.deadline))[0],a=s&&new Date(s.deadline).getTime()-Date.now()<36e5;return`
+      <span class="r-fee">${fee}</span>
+      <span class="r-time"><span data-deadline="${esc(comp.deadline)}">${timeLeft(comp.deadline)}</span><i class="bar${closingSoon ? " hot" : ""}"><b style="width:${Math.round(100 * elapsed(comp))}%"></b></i></span>
+      <span class="r-entries"><strong>${num(comp.submissionCount)}</strong><small>entries</small></span>
+    </li>`;
+}
+
+// Order a list of bounties: by pot, by entries, or by deadline.
+function sorted(list, key) {
+  const copy = list.slice();
+  if (key === "pot") {
+    return copy.sort(
+      (a, b) =>
+        Number(b.potUsd ?? b.rewardAmount) - Number(a.potUsd ?? a.rewardAmount),
+    );
+  }
+  if (key === "entries") {
+    return copy.sort((a, b) => (b.submissionCount ?? 0) - (a.submissionCount ?? 0));
+  }
+  return copy.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+}
+
+// The four-number strip above the board.
+function statsHtml(live) {
+  const pots = live.reduce(
+    (sum, c) => sum + Number(c.potUsd ?? c.rewardAmount ?? 0),
+    0,
+  );
+  const entries = live.reduce((sum, c) => sum + (c.submissionCount ?? 0), 0);
+  const next = live
+    .slice()
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))[0];
+  const urgent =
+    next && new Date(next.deadline).getTime() - Date.now() < 60 * 60 * 1000;
+  return `
     <div class="stats" role="status">
-      <div><span>Live bounties</span><strong>${num(e.length)}</strong></div>
-      <div><span>Live pots</span><strong class="green">${money(t)}</strong></div>
-      <div><span>Total entries</span><strong>${num(n)}</strong></div>
-      <div><span>Next deadline</span><strong class="${a?"red":""}" ${s?`data-countdown="${esc(s.deadline)}"`:""}>${s?timeLeftPrecise(s.deadline):"—"}</strong><small>${s?esc(s.title):""}</small></div>
-    </div>`}function ticker(e,t){const n=['<span class="live-dot">●</span> Live'],s=(t?.submissions??[]).slice().sort((e,t)=>new Date(t.createdAt)-new Date(e.createdAt)).slice(0,4);for(const e of s)n.push(`<a href="#/profile/${encodeURIComponent(e.hunter)}">@${esc(e.hunter)}</a> entered ${esc(t.title)} <span data-createdat="${esc(e.createdAt)}">${ago(e.createdAt)}</span>`);if(!s.length){let t=null;for(const n of e)for(const e of n.submissions??[]){const s=new Date(e.createdAt).getTime();(!t||s>t.t)&&(t={t:s,title:n.title})}t&&n.push(`newest entry ${ago(new Date(t.t).toISOString())} on ${esc(t.title)}`)}return`<p class="ticker">${n.join(" · ")}</p>`}function rewardsTable(e){const t=(e.rewardsNow??[]).slice().sort((e,t)=>Number(e.place)-Number(t.place));if(!t.length){const t=Object.entries(e.rewards??{}).sort((e,t)=>Number(e[0])-Number(t[0]));return t.length?`<table class="rewards"><thead><tr><th>Place</th><th>Reward</th></tr></thead><tbody>${t.map(([e,t])=>`<tr><td>${esc(e)}</td><td>${money(t)}</td></tr>`).join("")}</tbody></table>`:`<p>Reward: <strong>${pot(e)}</strong></p>`}const n=[];for(const e of t){const t=n[n.length-1];t&&t.baseUsd===e.baseUsd&&t.feeShareUsd===e.feeShareUsd&&Number(e.place)===t.end+1?(t.end=Number(e.place),t.amountUsd=e.amountUsd):n.push({start:Number(e.place),end:Number(e.place),baseUsd:e.baseUsd,feeShareUsd:e.feeShareUsd,amountUsd:e.amountUsd})}const s=Math.max(...t.map(e=>Number(e.amountUsd)||0),1);return`
+      <div><span>Bounties open</span><strong>${num(live.length)}</strong></div>
+      <div><span>Pots right now</span><strong class="green">${money(pots)}</strong></div>
+      <div><span>Entries so far</span><strong>${num(entries)}</strong></div>
+      <div><span>Closing next</span><strong class="${urgent ? "red" : ""}" ${next ? `data-countdown="${esc(next.deadline)}"` : ""}>${next ? timeLeftPrecise(next.deadline) : "—"}</strong><small>${next ? esc(next.title) : ""}</small></div>
+    </div>`;
+}
+
+// The live ticker: the newest entries, or the newest entry anywhere.
+function tickerHtml(live, detail) {
+  const parts = ['<span class="live-dot">●</span> Live now'];
+  const recent = (detail?.submissions ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 4);
+  for (const sub of recent) {
+    parts.push(
+      `<a href="#/profile/${encodeURIComponent(sub.hunter)}">@${esc(sub.hunter)}</a> joined ${esc(detail.title)} <span data-createdat="${esc(sub.createdAt)}">${ago(sub.createdAt)}</span>`,
+    );
+  }
+  if (recent.length === 0) {
+    let newest = null;
+    for (const comp of live) {
+      for (const sub of comp.submissions ?? []) {
+        const at = new Date(sub.createdAt).getTime();
+        if (!newest || at > newest.at) newest = { at, title: comp.title };
+      }
+    }
+    if (newest) {
+      parts.push(
+        `latest entry ${ago(new Date(newest.at).toISOString())} on ${esc(newest.title)}`,
+      );
+    }
+  }
+  return `<p class="ticker">${parts.join(" · ")}</p>`;
+}
+
+// Rewards as a table, grouping runs of places that pay the same.
+function rewardsHtml(comp) {
+  const rows = (comp.rewardsNow ?? [])
+    .slice()
+    .sort((a, b) => Number(a.place) - Number(b.place));
+  if (rows.length === 0) {
+    const base = Object.entries(comp.rewards ?? {}).sort(
+      (a, b) => Number(a[0]) - Number(b[0]),
+    );
+    if (base.length > 0) {
+      const body = base
+        .map(
+          ([place, amount]) =>
+            `<tr><td>${esc(place)}</td><td>${money(amount)}</td></tr>`,
+        )
+        .join("");
+      return `<table class="rewards"><thead><tr><th>Place</th><th>Pays</th></tr></thead><tbody>${body}</tbody></table>`;
+    }
+    return `<p>Reward: <strong>${potOf(comp)}</strong></p>`;
+  }
+  const groups = [];
+  for (const row of rows) {
+    const last = groups[groups.length - 1];
+    if (
+      last &&
+      last.baseUsd === row.baseUsd &&
+      last.feeShareUsd === row.feeShareUsd &&
+      Number(row.place) === last.end + 1
+    ) {
+      last.end = Number(row.place);
+      last.amountUsd = row.amountUsd;
+    } else {
+      groups.push({
+        start: Number(row.place),
+        end: Number(row.place),
+        baseUsd: row.baseUsd,
+        feeShareUsd: row.feeShareUsd,
+        amountUsd: row.amountUsd,
+      });
+    }
+  }
+  const top = Math.max(...rows.map((r) => Number(r.amountUsd) || 0), 1);
+  const body = groups
+    .map((g) => {
+      const place =
+        g.start === g.end ? placeLabel(g.start) : `${g.start}–${g.end}`;
+      const width = Math.max(
+        4,
+        Math.round((Number(g.amountUsd) / top) * 100),
+      );
+      return `<tr><td>${place}</td><td>${money(g.baseUsd)}</td><td>+${money(g.feeShareUsd)}</td><td><span class="pays"><i style="width:${width}%"></i></span><strong class="green">${money(g.amountUsd)}</strong>${g.start !== g.end ? " each" : ""}</td></tr>`;
+    })
+    .join("");
+  return `
     <table class="rewards">
-      <thead><tr><th>Place</th><th>Base</th><th>Fee share</th><th>Pays now</th></tr></thead>
-      <tbody>${n.map(e=>`<tr><td>${e.start===e.end?placeLabel(e.start):`${e.start}–${e.end}`}</td><td>${money(e.baseUsd)}</td><td>+${money(e.feeShareUsd)}</td><td><span class="pays"><i style="width:${Math.max(4,Math.round(Number(e.amountUsd)/s*100))}%"></i></span><strong class="green">${money(e.amountUsd)}</strong>${e.start!==e.end?" each":""}</td></tr>`).join("")}</tbody>
-    </table>`}function phasesTimeline(e){const t=e.phases??[],n=t.find(e=>"dev"===e.key),s=t.find(e=>"final"===e.key),a=n?.endsAt??e.deadline,o=s?.endsAt??null,d=Math.round(100*elapsedFrac({...e,deadline:a})),r=new Date;return`
+      <thead><tr><th>Place</th><th>Base</th><th>Fee cut</th><th>Pays now</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+// The opened → now → deadline → results timeline.
+function phasesHtml(comp) {
+  const phases = comp.phases ?? [];
+  const dev = phases.find((p) => p.key === "dev");
+  const fin = phases.find((p) => p.key === "final");
+  const deadline = dev?.endsAt ?? comp.deadline;
+  const results = fin?.endsAt ?? null;
+  const done = Math.round(100 * elapsed({ ...comp, deadline }));
+  const now = new Date();
+  return `
     <div class="phases">
-      <div class="track"><i style="width:${d}%"></i><b style="left:${d}%"></b></div>
+      <div class="track"><i style="width:${done}%"></i><b style="left:${done}%"></b></div>
       <div class="stops">
-        <div><b>Opened</b><span>${dtime(e.publishedAt)}</span></div>
-        <div class="cur"><b>Now</b><span>${dtime(r.toISOString())}</span></div>
-        <div><b>Deadline</b><span>${dtime(a)}</span></div>
-        <div><b>Results by</b><span>${o?dtime(o):"—"}</span></div>
+        <div><b>Opened</b><span>${dtime(comp.publishedAt)}</span></div>
+        <div class="cur"><b>Now</b><span>${dtime(now.toISOString())}</span></div>
+        <div><b>Deadline</b><span>${dtime(deadline)}</span></div>
+        <div><b>Results by</b><span>${results ? dtime(results) : "—"}</span></div>
       </div>
-    </div>`}function top5Preview(e,t){return t?t.length?`
+    </div>`;
+}
+
+// The top-5 preview under a bounty.
+function topFiveHtml(comp, top5) {
+  if (!top5) return '<p class="note">Top 5 still loading…</p>';
+  if (top5.length === 0) return '<p class="note">Nothing ranked here yet.</p>';
+  const body = top5
+    .map((entry) => {
+      const img = avatarUrl(entry.image);
+      return `<tr><td>${num(entry.rank ?? entry.performance)}</td><td class="entrant">${img ? `<img crossorigin="anonymous" src="${esc(img)}" alt="" width="20" height="20" loading="lazy">` : ""}<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a></td><td><strong>${pct(entry.value ?? entry.values?.judge)}</strong></td><td><strong class="green">${prizeAt(comp, entry.prize_rank ?? entry.rank)}</strong></td></tr>`;
+    })
+    .join("");
+  return `
     <table class="top5">
-      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>Prize now</th></tr></thead>
-      <tbody>${t.map(t=>{const n=t.image?t.image.startsWith("/")?`https://make.fun${t.image}`:t.image:"";return`<tr><td>${num(t.rank??t.performance)}</td><td class="entrant">${n?`<img crossorigin="anonymous" src="${esc(n)}" alt="" width="20" height="20" loading="lazy">`:""}<a href="#/profile/${encodeURIComponent(t.handle)}">${esc(t.handle)}</a></td><td><strong>${pct(t.value??t.values?.judge)}</strong></td><td><strong class="green">${prizeNow(e,t.prize_rank??t.rank)}</strong></td></tr>`}).join("")}</tbody>
+      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>Pays now</th></tr></thead>
+      <tbody>${body}</tbody>
     </table>
-    <p class="note"><a href="#/bounty/${encodeURIComponent(e.slug)}/leaderboard">Full leaderboard · ${num(e.submissionCount)} entries →</a></p>`:'<p class="note">No entries ranked yet.</p>':'<p class="note">Top 5 loading…</p>'}export function bountyDetail(e,t,n){const s=isTakingEntries(e)&&new Date(e.deadline).getTime()-Date.now()<864e5,a=e.entryFeeUsd&&Number(e.entryFeeUsd)>0;return`
+    <p class="note"><a href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Whole leaderboard · ${num(comp.submissionCount)} entries →</a></p>`;
+}
+
+// The shared detail block: stat cards, entry buttons, rewards, phases, top 5.
+export function bountyDetail(comp, top5, lastHour) {
+  const closingSoon =
+    isTakingEntries(comp) &&
+    new Date(comp.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
+  const paid = comp.entryFeeUsd && Number(comp.entryFeeUsd) > 0;
+  return `
     <div class="cards">
-      <div><span>Live pot</span><strong class="green">${pot(e)}</strong><small>${money(e.rewardAmount)} reward + ${money(e.entryFeesUsd??0)} in fees</small></div>
-      <div><span>Entry fee</span><strong>${a?money(e.entryFeeUsd):"Free"}</strong><small>${a?`${num(e.entryFeePayers)} paid · once per account`:"no fee to enter"}</small></div>
-      <div><span>Time left</span><strong class="${s?"red":""}" data-countdown="${esc(e.deadline)}">${timeLeftPrecise(e.deadline)}</strong><small>closes ${dtime(e.deadline)}</small></div>
-      <div><span>Entries</span><strong>${num(e.submissionCount)}</strong><small>${null!=n?`${num(n)} in the last hour`:"judge win rate decides"}</small></div>
+      <div><span>Pot now</span><strong class="green">${potOf(comp)}</strong><small>${money(comp.rewardAmount)} prize + ${money(comp.entryFeesUsd ?? 0)} from fees</small></div>
+      <div><span>To enter</span><strong>${paid ? money(comp.entryFeeUsd) : "Free"}</strong><small>${paid ? `${num(comp.entryFeePayers)} paid · one per account` : "nothing to pay"}</small></div>
+      <div><span>Closes in</span><strong class="${closingSoon ? "red" : ""}" data-countdown="${esc(comp.deadline)}">${timeLeftPrecise(comp.deadline)}</strong><small>ends ${dtime(comp.deadline)}</small></div>
+      <div><span>Entries</span><strong>${num(comp.submissionCount)}</strong><small>${lastHour != null ? `${num(lastHour)} in the past hour` : "the judge's win rate decides"}</small></div>
     </div>
-    <p class="cta"><a class="btn go" href="https://make.fun/bounty/${encodeURIComponent(e.slug)}">Enter on make.fun ↗</a>
-    <a class="btn ghost" href="#/bounty/${encodeURIComponent(e.slug)}/leaderboard">Leaderboard · ${num(e.submissionCount)} entries →</a></p>
-    <h3>Rewards <span class="h-sub">${num((e.rewardsNow??[]).length)} paid places share the live pot of ${pot(e)}</span></h3>
-    ${rewardsTable(e)}
-    <h3>Dates and phases</h3>
-    ${phasesTimeline(e)}
-    <h3>Top 5 now <span class="h-sub">judge win rate</span></h3>
-    ${top5Preview(e,t)}`}export function board(e,t){const n=e.items??[],s=n.filter(isTakingEntries),a=n.filter(e=>!isTakingEntries(e)),o=t.ended?[...a,...t.ended]:a,d="ended"===t.tab?o:s,r=sortItems(d,t.sort),i=(t.q??"").trim().toLowerCase(),l=t.cat&&"All"!==t.cat?r.filter(e=>(e.category??"")===t.cat):r,c=i?l.filter(e=>`${e.title} ${e.category??""} ${(e.skills??[]).join(" ")}`.toLowerCase().includes(i)):l,p=["All",...new Set(d.map(e=>e.category??"").filter(Boolean))].sort(),u=c.find(e=>e.slug===t.selected)??r.find(e=>e.slug===t.selected)??r[0]??null;u&&(t.selected=u.slug);const m=u?t.top5[u.slug]??null:null,h=u?t.full[u.slug]??null:null,$=Date.now()-36e5,b=h??u,g=b?(b.submissions??[]).filter(e=>new Date(e.createdAt).getTime()>$).length:null;return`
-    ${ticker(s,h)}
-    ${statsStrip(s)}
+    <p class="cta"><a class="btn go" href="https://make.fun/bounty/${encodeURIComponent(comp.slug)}">Enter this bounty ↗</a>
+    <a class="btn ghost" href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Full leaderboard · ${num(comp.submissionCount)} entries →</a></p>
+    <h3>Rewards <span class="h-sub">${num((comp.rewardsNow ?? []).length)} places split the pot of ${potOf(comp)}</span></h3>
+    ${rewardsHtml(comp)}
+    <h3>Dates &amp; phases</h3>
+    ${phasesHtml(comp)}
+    <h3>Top 5 <span class="h-sub">by judge win rate</span></h3>
+    ${topFiveHtml(comp, top5)}`;
+}
+
+// The board: ticker, stats, controls, the list, and the selected bounty.
+export function board(data, state) {
+  const items = data.items ?? [];
+  const live = items.filter(isTakingEntries);
+  const finished = items.filter((c) => !isTakingEntries(c));
+  const ended = state.ended ? [...finished, ...state.ended] : finished;
+  const shown = state.tab === "ended" ? ended : live;
+  const ordered = sorted(shown, state.sort);
+  const query = (state.q ?? "").trim().toLowerCase();
+  const byCat =
+    state.cat && state.cat !== "All"
+      ? ordered.filter((c) => (c.category ?? "") === state.cat)
+      : ordered;
+  const matches = query
+    ? byCat.filter((c) =>
+        `${c.title} ${c.category ?? ""} ${(c.skills ?? []).join(" ")}`
+          .toLowerCase()
+          .includes(query),
+      )
+    : byCat;
+  const cats = [
+    "All",
+    ...new Set(shown.map((c) => c.category ?? "").filter(Boolean)),
+  ].sort();
+  const selected =
+    matches.find((c) => c.slug === state.selected) ??
+    ordered.find((c) => c.slug === state.selected) ??
+    ordered[0] ??
+    null;
+  if (selected) state.selected = selected.slug;
+  const top5 = selected ? state.top5[selected.slug] ?? null : null;
+  const full = selected ? state.full[selected.slug] ?? null : null;
+  const hourAgo = Date.now() - 36e5;
+  const detail = full ?? selected;
+  const lastHour = detail
+    ? (detail.submissions ?? []).filter(
+        (s) => new Date(s.createdAt).getTime() > hourAgo,
+      ).length
+    : null;
+  return `
+    ${tickerHtml(live, full)}
+    ${statsHtml(live)}
     <div class="controls">
       <div class="tabs" role="tablist">
-        <button type="button" role="tab" data-action="tab" data-tab="live" ${"live"===t.tab?'class="on" aria-selected="true"':""}>Live ${num(s.length)}</button>
-        <button type="button" role="tab" data-action="tab" data-tab="ended" ${"ended"===t.tab?'class="on" aria-selected="true"':""}>Ended ${num(o.length)}</button>
+        <button type="button" role="tab" data-action="tab" data-tab="live" ${state.tab === "live" ? 'class="on" aria-selected="true"' : ""}>Open ${num(live.length)}</button>
+        <button type="button" role="tab" data-action="tab" data-tab="ended" ${state.tab === "ended" ? 'class="on" aria-selected="true"' : ""}>Closed ${num(ended.length)}</button>
       </div>
-      <label class="search">Search <input id="q" type="search" placeholder="title, category or skill…" value="${esc(t.q??"")}" autocomplete="off"></label>
-      <button type="button" data-action="refresh">Refresh</button>
+      <label class="search">Find <input id="q" type="search" placeholder="title, category, skill…" value="${esc(state.q ?? "")}" autocomplete="off"></label>
+      <button type="button" data-action="refresh">Reload</button>
     </div>
     <div class="chiprows">
-    <div class="chips"><span>Sort</span>
-      <button type="button" data-action="sort" data-sort="closing" ${"closing"===t.sort?'class="on"':""}>Closing soon</button>
-      <button type="button" data-action="sort" data-sort="pot" ${"pot"===t.sort?'class="on"':""}>Biggest pot</button>
-      <button type="button" data-action="sort" data-sort="entries" ${"entries"===t.sort?'class="on"':""}>Most entries</button>
+    <div class="chips"><span>Order</span>
+      <button type="button" data-action="sort" data-sort="closing" ${state.sort === "closing" ? 'class="on"' : ""}>Soonest first</button>
+      <button type="button" data-action="sort" data-sort="pot" ${state.sort === "pot" ? 'class="on"' : ""}>Largest pot</button>
+      <button type="button" data-action="sort" data-sort="entries" ${state.sort === "entries" ? 'class="on"' : ""}>Most entered</button>
     </div>
-    <div class="chips"><span>Category</span>
-      ${p.map(e=>`<button type="button" data-action="cat" data-cat="${esc(e)}" ${t.cat===e?'class="on"':""}>${esc(e)}</button>`).join("")}
+    <div class="chips"><span>Kind</span>
+      ${cats.map((c) => `<button type="button" data-action="cat" data-cat="${esc(c)}" ${state.cat === c ? 'class="on"' : ""}>${esc(c)}</button>`).join("")}
     </div>
     </div>
     <div class="split">
       <div class="list-col">
-        ${0===c.length?'<p class="empty">No bounties match that search.</p>':`<ul class="rows">${c.map(e=>boardRow(e,e.slug===t.selected)).join("")}</ul>`}
+        ${matches.length === 0 ? '<p class="empty">Nothing matches that search.</p>' : `<ul class="rows">${matches.map((c) => rowHtml(c, c.slug === state.selected)).join("")}</ul>`}
       </div>
       <aside class="detail" aria-label="Selected bounty">
-        ${u?`
-        <p class="d-crumbs">Board / ${esc(u.category??"")} · ${statusBadge(u)}</p>
-        <h2 class="d-title">${esc(u.title)}</h2>
-        <p class="d-sum">${esc(u.summary??"")}</p>
-        ${bountyDetail(u,m,g)}
-        <div class="prose clamp">${md(u.description??"")}</div>
-        <p><a href="#/bounty/${encodeURIComponent(u.slug)}">Full bounty page →</a></p>`:'<p class="empty">No bounty selected.</p>'}
+        ${selected ? `
+        <p class="d-crumbs">Board / ${esc(selected.category ?? "")} · ${badgeFor(selected)}</p>
+        <h2 class="d-title">${esc(selected.title)}</h2>
+        <p class="d-sum">${esc(selected.summary ?? "")}</p>
+        ${bountyDetail(selected, top5, lastHour)}
+        <div class="prose clamp">${md(selected.description ?? "")}</div>
+        <p><a href="#/bounty/${encodeURIComponent(selected.slug)}">Open the full bounty page →</a></p>` : '<p class="empty">Pick a bounty to see it here.</p>'}
       </aside>
     </div>
-    <p class="note">Pots grow as entry fees are paid in. A bounty past its deadline is ended even while its status still reads open, until its results are published.</p>`}export function bounty(e,t){const n=Date.now()-36e5,s=(e.submissions??[]).filter(e=>new Date(e.createdAt).getTime()>n).length,a=(e.submissions??[]).slice().sort((e,t)=>new Date(t.createdAt)-new Date(e.createdAt)).slice(0,8);return`
-    <p class="crumbs"><a href="#/">← All bounties</a> · <a href="#/bounty/${encodeURIComponent(e.slug)}/leaderboard">Leaderboard →</a></p>
-    <h1>${esc(e.title)}</h1>
-    <p class="lede">${esc(e.summary??"")}</p>
-    <p class="tags">${statusBadge(e)}<span class="tag">${esc(e.category??"")}</span>${(e.skills??[]).map(e=>`<span class="tag">${esc(e)}</span>`).join("")}</p>
-    ${bountyDetail(e,t,s)}
-    <h2>Description</h2>
-    <div class="prose">${md(e.description??"")}</div>
-    ${e.rules?`<details class="rules"><summary>Full rules</summary><div class="prose">${md(e.rules)}</div></details>`:""}
-    ${a.length?`<h2>Recent entries</h2><ul class="recent">${a.map(e=>`<li><a href="#/profile/${encodeURIComponent(e.hunter)}">@${esc(e.hunter)}</a> — ${esc(e.title??"")} · <span data-createdat="${esc(e.createdAt)}">${ago(e.createdAt)}</span>${e.status?` · ${esc(e.status)}`:""}</li>`).join("")}</ul>`:""}`}function lbRow(e,t){const n=e.values??e,s=null!=e.value?pct(e.value):pct(n.judge),a=null!=e.interval?.low?pct(e.interval.low):pct(n.judge_low),o=null!=e.interval?.high?pct(e.interval.high):pct(n.judge_high),d=e.values?.bytes??n.bytes,r=e.image?e.image.startsWith("/")?`https://make.fun${e.image}`:e.image:"";return`
+    <p class="note">Pots grow when entry fees come in. A bounty past its deadline counts as finished even if it still shows as open, until results are out.</p>`;
+}
+
+// One bounty page: summary, stats, rewards, phases, top 5, description,
+// rules, and the most recent entries.
+export function bounty(comp, top5) {
+  const hourAgo = Date.now() - 36e5;
+  const lastHour = (comp.submissions ?? []).filter(
+    (s) => new Date(s.createdAt).getTime() > hourAgo,
+  ).length;
+  const recent = (comp.submissions ?? [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 8);
+  return `
+    <p class="crumbs"><a href="#/">← Every bounty</a> · <a href="#/bounty/${encodeURIComponent(comp.slug)}/leaderboard">Standings →</a></p>
+    <h1>${esc(comp.title)}</h1>
+    <p class="lede">${esc(comp.summary ?? "")}</p>
+    <p class="tags">${badgeFor(comp)}<span class="tag">${esc(comp.category ?? "")}</span>${(comp.skills ?? []).map((s) => `<span class="tag">${esc(s)}</span>`).join("")}</p>
+    ${bountyDetail(comp, top5, lastHour)}
+    <h2>About this bounty</h2>
+    <div class="prose">${md(comp.description ?? "")}</div>
+    ${comp.rules ? `<details class="rules"><summary>Read the full rules</summary><div class="prose">${md(comp.rules)}</div></details>` : ""}
+    ${recent.length ? `<h2>Latest entries</h2><ul class="recent">${recent.map((s) => `<li><a href="#/profile/${encodeURIComponent(s.hunter)}">@${esc(s.hunter)}</a> — ${esc(s.title ?? "")} · <span data-createdat="${esc(s.createdAt)}">${ago(s.createdAt)}</span>${s.status ? ` · ${esc(s.status)}` : ""}</li>`).join("")}</ul>` : ""}`;
+}
+
+// One row of a leaderboard table.
+function lbRow(entry, comp) {
+  const vals = entry.values ?? entry;
+  const rate = entry.value != null ? pct(entry.value) : pct(vals.judge);
+  const low =
+    entry.interval?.low != null ? pct(entry.interval.low) : pct(vals.judge_low);
+  const high =
+    entry.interval?.high != null
+      ? pct(entry.interval.high)
+      : pct(vals.judge_high);
+  const size = entry.values?.bytes ?? vals.bytes;
+  const img = avatarUrl(entry.image);
+  const status =
+    entry.status ?? (entry.judged === false ? "not judged" : "judged");
+  return `
     <tr>
-      <td>${num(e.rank??e.performance)}</td>
-      <td class="entrant">${r?`<img crossorigin="anonymous" src="${esc(r)}" alt="" width="28" height="28" loading="lazy">`:""}<a href="#/profile/${encodeURIComponent(e.handle)}">${esc(e.handle)}</a><span class="entry-title">${esc(e.title??"")}</span></td>
-      <td><strong>${s}</strong></td>
-      <td>${a} – ${o}</td>
-      <td><strong class="green">${prizeNow(t,e.prize_rank??e.rank)}</strong></td>
-      <td>${bytes(d)}</td>
-      <td>${esc(e.status??(!1===e.judged?"not judged":"judged"))}</td>
-    </tr>`}export function leaderboard(e,t,n){const s=t.entries??[],a=t.rest??[],o=s.concat(a),d=o.slice(0,n);return`
-    <p class="crumbs"><a href="#/">← All bounties</a> · <a href="#/bounty/${encodeURIComponent(e.slug)}">${esc(e.title)}</a></p>
-    <h1>Leaderboard — ${esc(e.title)}</h1>
-    <p class="lede">${num(o.length)} entries ranked · phase: ${esc(t.phase?.title??t.phase?.key??"")} · judge win rate, 90% interval · prize now is what each rank pays from the live pot</p>
-    ${0===o.length?'<p class="empty">No entries on the leaderboard yet.</p>':`<table class="lb">
-      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>90% interval</th><th>Prize now</th><th>Size</th><th>Status</th></tr></thead>
-      <tbody>${d.map(t=>lbRow(t,e)).join("")}</tbody>
+      <td>${num(entry.rank ?? entry.performance)}</td>
+      <td class="entrant">${img ? `<img crossorigin="anonymous" src="${esc(img)}" alt="" width="28" height="28" loading="lazy">` : ""}<a href="#/profile/${encodeURIComponent(entry.handle)}">${esc(entry.handle)}</a><span class="entry-title">${esc(entry.title ?? "")}</span></td>
+      <td><strong>${rate}</strong></td>
+      <td>${low} – ${high}</td>
+      <td><strong class="green">${prizeAt(comp, entry.prize_rank ?? entry.rank)}</strong></td>
+      <td>${bytes(size)}</td>
+      <td>${esc(status)}</td>
+    </tr>`;
+}
+
+// A leaderboard page: ranked entries, paged 25 at a time.
+export function leaderboard(comp, lb, shown) {
+  const first = lb.entries ?? [];
+  const rest = lb.rest ?? [];
+  const all = first.concat(rest);
+  const page = all.slice(0, shown);
+  return `
+    <p class="crumbs"><a href="#/">← Every bounty</a> · <a href="#/bounty/${encodeURIComponent(comp.slug)}">${esc(comp.title)}</a></p>
+    <h1>Standings — ${esc(comp.title)}</h1>
+    <p class="lede">${num(all.length)} entries placed · stage: ${esc(lb.phase?.title ?? lb.phase?.key ?? "")} · judge win rate with a 90% range · prize now is what each place pays out of the live pot</p>
+    ${all.length === 0 ? '<p class="empty">No entries placed yet.</p>' : `<table class="lb">
+      <thead><tr><th>#</th><th>Entrant</th><th>Win rate</th><th>90% range</th><th>Pays now</th><th>Size</th><th>Status</th></tr></thead>
+      <tbody>${page.map((e) => lbRow(e, comp)).join("")}</tbody>
     </table>
-    ${n<o.length?`<p><button type="button" data-action="more-lb">Show more (${num(Math.min(25,o.length-n))} of ${num(o.length-n)} remaining)</button></p>`:`<p class="note">Showing all ${num(o.length)} entries.</p>`}`}
-    <p class="note">Win rate is the judge's share of wins against the field. Click a handle to open that entrant's public profile.</p>`}export function profile(e){const t=e.record??{},n=e.solutions??[];return`
-    <p class="crumbs"><a href="#/">← All bounties</a></p>
+    ${shown < all.length ? `<p><button type="button" data-action="more-lb">Show more (${num(Math.min(25, all.length - shown))} more of ${num(all.length - shown)})</button></p>` : `<p class="note">That is all ${num(all.length)} entries.</p>`}`}
+    <p class="note">Win rate is how often the judge picked an entry over the field. Tap a handle to open that entrant's profile.</p>`;
+}
+
+// A public profile: who they are, their record, and their entries.
+export function profile(p) {
+  const record = p.record ?? {};
+  const entries = p.solutions ?? [];
+  return `
+    <p class="crumbs"><a href="#/">← Every bounty</a></p>
     <div class="who">
-      ${e.image?`<img class="avatar" crossorigin="anonymous" src="${esc(e.image)}" alt="" width="96" height="96">`:""}
+      ${p.image ? `<img class="avatar" crossorigin="anonymous" src="${esc(p.image)}" alt="" width="96" height="96">` : ""}
       <div>
-        <h1>${esc(e.display_name??e.handle)}</h1>
-        <p class="handle">@${esc(e.handle)}</p>
-        ${e.bio?`<p>${esc(e.bio)}</p>`:""}
+        <h1>${esc(p.display_name ?? p.handle)}</h1>
+        <p class="handle">@${esc(p.handle)}</p>
+        ${p.bio ? `<p>${esc(p.bio)}</p>` : ""}
         <p class="links">
-          ${e.github_login?`<a href="https://github.com/${encodeURIComponent(e.github_login)}">GitHub ↗</a>`:""}
-          ${e.x?`<a href="https://x.com/${encodeURIComponent(e.x)}">X ↗</a>`:""}
-          ${e.discord?`<span>Discord: ${esc(e.discord)}</span>`:""}
-          <span>Joined ${shortDate(e.joined_at)}</span>
+          ${p.github_login ? `<a href="https://github.com/${encodeURIComponent(p.github_login)}">GitHub ↗</a>` : ""}
+          ${p.x ? `<a href="https://x.com/${encodeURIComponent(p.x)}">X ↗</a>` : ""}
+          ${p.discord ? `<span>Discord: ${esc(p.discord)}</span>` : ""}
+          <span>Joined ${shortDate(p.joined_at)}</span>
         </p>
       </div>
     </div>
     <dl class="facts">
-      <dt>Competitions entered</dt><dd>${num(t.competitions_entered)}</dd>
-      <dt>Placed</dt><dd>${num(t.competitions_placed)}</dd>
-      <dt>Won</dt><dd>${num(t.competitions_won)}</dd>
-      <dt>Podium finishes</dt><dd>${num(t.podium_finishes)}</dd>
-      <dt>Best placement</dt><dd>${null!=t.best_placement?`#${num(t.best_placement)}`:"—"}</dd>
-      <dt>Prize money</dt><dd>${money(t.prize_usd??0)}</dd>
+      <dt>Bounties entered</dt><dd>${num(record.competitions_entered)}</dd>
+      <dt>Placed</dt><dd>${num(record.competitions_placed)}</dd>
+      <dt>Won</dt><dd>${num(record.competitions_won)}</dd>
+      <dt>Podiums</dt><dd>${num(record.podium_finishes)}</dd>
+      <dt>Best finish</dt><dd>${record.best_placement != null ? `#${num(record.best_placement)}` : "—"}</dd>
+      <dt>Winnings</dt><dd>${money(record.prize_usd ?? 0)}</dd>
     </dl>
-    <h2>Entries (${num(n.length)})</h2>
-    ${0===n.length?'<p class="empty">No entries yet.</p>':`<table class="lb"><thead><tr><th>Competition</th><th>Entry</th><th>Place</th><th>Score</th><th>Prize</th><th>Entered</th></tr></thead>
-      <tbody>${n.map(e=>`<tr>
-        <td><a href="#/bounty/${encodeURIComponent(e.competition?.slug??"")}">${esc(e.competition?.title??e.competition?.slug??"")}</a></td>
+    <h2>Entries (${num(entries.length)})</h2>
+    ${entries.length === 0 ? '<p class="empty">No entries so far.</p>' : `<table class="lb"><thead><tr><th>Bounty</th><th>Entry</th><th>Place</th><th>Score</th><th>Prize</th><th>Entered</th></tr></thead>
+      <tbody>${entries.map((e) => `<tr>
+        <td><a href="#/bounty/${encodeURIComponent(e.competition?.slug ?? "")}">${esc(e.competition?.title ?? e.competition?.slug ?? "")}</a></td>
         <td>${esc(e.title)}</td>
-        <td>${null!=e.placement?`#${num(e.placement)}`:"—"}</td>
-        <td>${null!=e.score?.value?pct(e.score.value):"—"}</td>
-        <td>${null!=e.prize_usd?money(e.prize_usd):"—"}</td>
+        <td>${e.placement != null ? `#${num(e.placement)}` : "—"}</td>
+        <td>${e.score?.value != null ? pct(e.score.value) : "—"}</td>
+        <td>${e.prize_usd != null ? money(e.prize_usd) : "—"}</td>
         <td>${shortDate(e.entered_at)}</td>
-      </tr>`).join("")}</tbody></table>`}`}
+      </tr>`).join("")}</tbody></table>`}`;
+}
